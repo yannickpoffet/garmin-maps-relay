@@ -5,6 +5,14 @@
          which must be installed. On Android 11+ package visibility is
          filtered, so it has to be declared explicitly or the SDK cannot
          find it. -->
+    <!-- Android will happily kill this process mid-route otherwise. The
+         foreground notification is the price of staying alive while relaying;
+         "connectedDevice" is the accurate type, since that is literally what
+         this does. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <queries>
         <package android:name="com.garmin.android.apps.connectmobile" />
         <package android:name="com.google.android.apps.maps" />
@@ -32,6 +40,7 @@
             android:name=".NavListener"
             android:exported="true"
             android:label="Maps Relay"
+            android:foregroundServiceType="connectedDevice"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />

@@ -2,7 +2,9 @@ package com.mapsrelay.companion
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -89,6 +91,7 @@ class MainActivity : Activity() {
 
         setContentView(ScrollView(this).apply { addView(root) })
 
+        requestNotificationPermissionIfNeeded()
         WatchRelay.onStatusChange = { ui.post { render() } }
         WatchRelay.start(applicationContext)
     }
@@ -122,6 +125,19 @@ class MainActivity : Activity() {
             appendLine("navigation active   : ${Status.navActive}")
             appendLine("messages relayed    : ${Status.sentCount}")
             appendLine("last payload        : ${Status.lastPayload}")
+        }
+    }
+
+    /**
+     * Android 13+ needs this before the relay can show its ongoing
+     * notification, and without that notification the service cannot go
+     * foreground and is liable to be killed mid-route.
+     */
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val perm = android.Manifest.permission.POST_NOTIFICATIONS
+        if (checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(perm), 1)
         }
     }
 

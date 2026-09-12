@@ -24,6 +24,7 @@ object WatchRelay {
     private var ciq: ConnectIQ? = null
     private var device: IQDevice? = null
     private var app: IQApp? = null
+    private var lastRepickAt = 0L
 
     @Volatile var status: String = "not started"
         private set
@@ -33,6 +34,8 @@ object WatchRelay {
 
     /** Set by the UI so it can repaint when status changes. */
     @Volatile var onStatusChange: (() -> Unit)? = null
+
+    private const val REPICK_INTERVAL_MS = 5000L
 
     private fun setStatus(s: String) {
         status = s
@@ -84,6 +87,11 @@ object WatchRelay {
         try {
             instance.registerForDeviceEvents(d) { dev, st ->
                 setStatus("${dev.friendlyName}: $st")
+                // Forget a device that has gone away so the next send re-picks
+                // rather than firing into a dead handle.
+                if (st != IQDevice.IQDeviceStatus.CONNECTED) {
+                    device = null
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "registerForDeviceEvents failed", e)
@@ -99,6 +107,17 @@ object WatchRelay {
      */
     fun send(payload: Map<String, Any>): Boolean {
         val instance = ciq ?: return false
+        // The watch can drop off and come back mid-route (out of range, phone
+        // Bluetooth blip). Re-picking lazily here means recovery happens on
+        // the next instruction instead of requiring the user to notice and
+        // press Reconnect while driving.
+        if (device == null) {
+            val now = System.currentTimeMillis()
+            if (now - lastRepickAt > REPICK_INTERVAL_MS) {
+                lastRepickAt = now
+                pickDevice(instance)
+            }
+        }
         val d = device ?: return false
         val a = app ?: return false
         return try {

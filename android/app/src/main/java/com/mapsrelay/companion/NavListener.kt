@@ -1,5 +1,10 @@
 package com.mapsrelay.companion
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.util.Log
 import me.trevi.navparser.lib.NavigationData
 import me.trevi.navparser.lib.NavigationNotification
@@ -19,10 +24,64 @@ class NavListener : NavigationListener() {
     private var lastStreet = ""
     private var lastBucket = -1
     private var lastSentAt = 0L
+    private var foreground = false
 
     override fun onCreate() {
         super.onCreate()
+        createChannel()
         WatchRelay.start(applicationContext)
+    }
+
+    override fun onDestroy() {
+        stopRelayForeground()
+        super.onDestroy()
+    }
+
+    private fun createChannel() {
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        val ch = NotificationChannel(
+            CHANNEL_ID, "Navigation relay", NotificationManager.IMPORTANCE_LOW
+        ).apply { description = "Shown while directions are being sent to the watch" }
+        nm.createNotificationChannel(ch)
+    }
+
+    /**
+     * Go foreground for the duration of a route.
+     *
+     * Without this the system is free to kill the process between
+     * notifications, which on a long drive it eventually will — and the relay
+     * would stop silently, mid-route, which is the worst possible failure mode.
+     */
+    private fun startRelayForeground() {
+        if (foreground) return
+        val n: Notification = Notification.Builder(this, CHANNEL_ID)
+            .setContentTitle("Relaying directions")
+            .setContentText("Sending Google Maps guidance to your watch")
+            .setSmallIcon(android.R.drawable.ic_menu_directions)
+            .setOngoing(true)
+            .build()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            } else {
+                startForeground(NOTIF_ID, n)
+            }
+            foreground = true
+        } catch (e: Exception) {
+            // Most likely the user denied the notification permission on
+            // Android 13+. Relaying still works; it is just more killable.
+            Log.w(WatchRelay.TAG, "could not go foreground", e)
+        }
+    }
+
+    private fun stopRelayForeground() {
+        if (!foreground) return
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            Log.w(WatchRelay.TAG, "stopForeground failed", e)
+        }
+        foreground = false
     }
 
     override fun onNavigationNotificationAdded(navNotification: NavigationNotification) {
@@ -34,6 +93,7 @@ class NavListener : NavigationListener() {
     }
 
     override fun onNavigationNotificationRemoved(navNotification: NavigationNotification) {
+        stopRelayForeground()
         // Navigation ended. Reset so the next route is not deduped against
         // this one; the watch will fall back to its stale display by itself.
         lastManeuver = -1
@@ -44,6 +104,7 @@ class NavListener : NavigationListener() {
 
     private fun handle(data: NavigationData) {
         Status.navActive = true
+        startRelayForeground()
 
         if (data.isRerouting) {
             send(Maneuver.UNKNOWN, "", "rerouting", "", -1, force = true)
@@ -114,6 +175,8 @@ class NavListener : NavigationListener() {
 
     companion object {
         private const val MIN_SEND_INTERVAL_MS = 1000L
+        private const val CHANNEL_ID = "relay"
+        private const val NOTIF_ID = 1
     }
 }
 
