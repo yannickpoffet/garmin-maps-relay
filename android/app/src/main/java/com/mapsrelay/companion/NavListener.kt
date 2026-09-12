@@ -46,7 +46,7 @@ class NavListener : NavigationListener() {
         Status.navActive = true
 
         if (data.isRerouting) {
-            send(Maneuver.UNKNOWN, "", "rerouting", "", force = true)
+            send(Maneuver.UNKNOWN, "", "rerouting", "", -1, force = true)
             return
         }
         if (!data.isValid()) return
@@ -63,13 +63,13 @@ class NavListener : NavigationListener() {
                 bucket != lastBucket
         if (!changed) return
 
-        send(maneuver, distanceText, instruction, eta, force = false)
+        send(maneuver, distanceText, instruction, eta, distanceMeters.toInt(), force = false)
         lastManeuver = maneuver
         lastStreet = instruction
         lastBucket = bucket
     }
 
-    private fun send(m: Int, d: String, s: String, e: String, force: Boolean) {
+    private fun send(m: Int, d: String, s: String, e: String, meters: Int, force: Boolean) {
         // Maps rewrites the notification as the distance ticks down, several
         // times a second on a fast road. Relaying each one would flood the BLE
         // link and drain both batteries, so hold a hard floor of one per
@@ -78,7 +78,10 @@ class NavListener : NavigationListener() {
         if (!force && now - lastSentAt < MIN_SEND_INTERVAL_MS) return
         lastSentAt = now
 
-        val payload = mapOf("m" to m, "d" to d, "s" to s, "e" to e)
+        // "dm" is the distance as a number. The watch needs it to decide when
+        // to buzz; re-parsing the localised "0.4 km" string over there would be
+        // fragile for no reason when the phone already has the value.
+        val payload = mapOf("m" to m, "d" to d, "s" to s, "e" to e, "dm" to meters)
         val ok = WatchRelay.send(payload)
         Status.lastPayload = payload.toString()
         Status.sentCount++

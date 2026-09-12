@@ -7,12 +7,14 @@ class NavDelegate extends WatchUi.BehaviorDelegate {
 
     private var _view as NavView;
     private var _state as NavState;
+    private var _alerts as Alerts;
     private var _demoIndex as Number = 0;
 
-    function initialize(view as NavView, state as NavState) {
+    function initialize(view as NavView, state as NavState, alerts as Alerts) {
         BehaviorDelegate.initialize();
         _view = view;
         _state = state;
+        _alerts = alerts;
     }
 
     //! UP/DOWN cycle the canned instructions, so the display can be checked
@@ -20,6 +22,7 @@ class NavDelegate extends WatchUi.BehaviorDelegate {
     function onNextPage() as Boolean {
         _demoIndex++;
         _state.apply(Demo.sample(_demoIndex));
+        _alerts.update(_state.key(), _state.meters, _state.arrived);
         WatchUi.requestUpdate();
         return true;
     }
@@ -28,6 +31,7 @@ class NavDelegate extends WatchUi.BehaviorDelegate {
         _demoIndex--;
         if (_demoIndex < 0) { _demoIndex = Demo.count() - 1; }
         _state.apply(Demo.sample(_demoIndex));
+        _alerts.update(_state.key(), _state.meters, _state.arrived);
         WatchUi.requestUpdate();
         return true;
     }

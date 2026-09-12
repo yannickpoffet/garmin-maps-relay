@@ -64,7 +64,7 @@ class MainActivity : Activity() {
             // phone -> Garmin Connect -> BLE -> watch path works.
             setOnClickListener {
                 val ok = WatchRelay.send(
-                    mapOf("m" to Maneuver.RIGHT, "d" to "200 m",
+                    mapOf("m" to Maneuver.RIGHT, "d" to "200 m", "dm" to 200,
                           "s" to "Test from phone", "e" to "--:--")
                 )
                 if (!ok) toastStatus("relay not ready — see status below")

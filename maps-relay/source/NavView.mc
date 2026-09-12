@@ -63,6 +63,10 @@ class NavView extends WatchUi.View {
             drawCentered(dc, "waiting for phone", Graphics.COLOR_DK_GRAY);
             return;
         }
+        if (_state.arrived && !_state.isStale()) {
+            drawArrival(dc);
+            return;
+        }
         drawNav(dc);
     }
 
@@ -97,6 +101,21 @@ class NavView extends WatchUi.View {
                     Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, (_h * 0.80).toNumber(), Graphics.FONT_XTINY,
                     footer, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    //! Arrival gets its own screen rather than being one more turn: it is the
+    //! end of the route, and the distance/ETA lines are meaningless here.
+    function drawArrival(dc as Graphics.Dc) as Void {
+        var cx = _w / 2;
+        Maneuver.draw(dc, Maneuver.ARRIVE, cx, (_h * 0.32).toNumber(),
+                      (_h * 0.26).toNumber(), Graphics.COLOR_GREEN);
+        dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, (_h * 0.52).toNumber(), Graphics.FONT_MEDIUM, "Arrived",
+                    Graphics.TEXT_JUSTIFY_CENTER);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, (_h * 0.68).toNumber(), Graphics.FONT_XTINY,
+                    fit(dc, _state.street, Graphics.FONT_XTINY, (_w * 0.82).toNumber()),
+                    Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     //! Raw payload plus age — the M0 acceptance test is read from this screen.

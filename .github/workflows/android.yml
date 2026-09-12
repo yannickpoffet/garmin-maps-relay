@@ -2,9 +2,12 @@ name: Build APK
 
 on:
   push:
+    branches: [main]
     paths:
       - 'android/**'
       - '.github/workflows/android.yml'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -31,12 +34,29 @@ jobs:
         working-directory: android
         run: gradle --no-daemon assembleDebug
 
-      - name: Publish APK
+      - name: Stage APK
+        run: mv android/app/build/outputs/apk/debug/app-debug.apk maps-relay.apk
+
+      # A tag publishes a permanent, versioned release. Everything else
+      # refreshes the rolling `apk` release, so the phone always has one
+      # stable URL to fetch the latest build from.
+      - name: Publish versioned release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mv android/app/build/outputs/apk/debug/app-debug.apk maps-relay.apk
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "$TAG" maps-relay.apk \
+            --title "Maps Relay $TAG" \
+            --notes-file RELEASE_NOTES.md \
+            || gh release upload "$TAG" maps-relay.apk --clobber
+
+      - name: Refresh rolling APK release
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
           gh release delete apk -y --cleanup-tag 2>/dev/null || true
           gh release create apk maps-relay.apk \
-            --title "Maps Relay APK" \
+            --title "Maps Relay APK (latest)" \
             --notes "Debug build from ${GITHUB_SHA:0:7}. Download maps-relay.apk on your phone and open it."

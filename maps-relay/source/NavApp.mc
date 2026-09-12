@@ -14,10 +14,12 @@ class NavApp extends Application.AppBase {
     private var _phoneMethod as Method(msg as Communications.PhoneAppMessage) as Void;
     private var _state as NavState;
     private var _view as NavView?;
+    private var _alerts as Alerts;
 
     function initialize() {
         AppBase.initialize();
         _state = new NavState();
+        _alerts = new Alerts();
         _phoneMethod = method(:onPhone);
         if (Communications has :registerForPhoneAppMessages) {
             Communications.registerForPhoneAppMessages(_phoneMethod);
@@ -32,12 +34,15 @@ class NavApp extends Application.AppBase {
 
     function getInitialView() as [Views] or [Views, InputDelegates] {
         _view = new NavView(_state);
-        return [_view, new NavDelegate(_view, _state)];
+        return [_view, new NavDelegate(_view, _state, _alerts)];
     }
 
     //! A message arrived from the phone.
     function onPhone(msg as Communications.PhoneAppMessage) as Void {
         _state.apply(msg.data);
+        // Alerting belongs here rather than in the view: onUpdate runs on a
+        // timer and would re-trigger the haptics on every repaint.
+        _alerts.update(_state.key(), _state.meters, _state.arrived);
         WatchUi.requestUpdate();
     }
 }

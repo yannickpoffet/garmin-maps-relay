@@ -15,6 +15,15 @@ class NavState {
     public var distance as String = "";
     public var eta as String = "";
 
+    //! Distance to the maneuver in metres, or -1 when unknown. Sent
+    //! separately from the display string because the alert thresholds need a
+    //! number, and re-parsing a localised "0.4 km" on the watch would be both
+    //! fragile and pointless when the phone already knows the value.
+    public var meters as Number = -1;
+
+    //! True when this is the final "you have arrived" instruction.
+    public var arrived as Boolean = false;
+
     //! Raw payload as received, kept for the M0 debug view.
     public var raw as String = "";
 
@@ -43,6 +52,8 @@ class NavState {
             street   = asString(d.get("s"));
             distance = asString(d.get("d"));
             eta      = asString(d.get("e"));
+            meters   = asNumber(d.get("dm"), -1);
+            arrived  = (maneuver == Maneuver.ARRIVE);
         } else {
             // Not a nav payload — show it as the street line so M0 can be
             // verified without the parser existing yet.
@@ -50,7 +61,14 @@ class NavState {
             street = raw;
             distance = "";
             eta = "";
+            meters = -1;
+            arrived = false;
         }
+    }
+
+    //! Identifies the current turn, so alerts can re-arm when it changes.
+    function key() as String {
+        return maneuver.toString() + "|" + street;
     }
 
     function ageSec() as Number {
