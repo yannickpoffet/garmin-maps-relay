@@ -53,7 +53,7 @@ package:
 sideload: package
 	-@pkill -x gvfsd-mtp 2>/dev/null; sleep 2
 	python3 tools/mtp_push.py $(OUT) Apps
-	@echo "Unplug the watch, then find 'Capability Explorer' in the app list."
+	@echo "Unplug the watch, then find 'Maps Relay' in the app list."
 
 ## List the .prg files currently on the watch.
 watch-apps:
