@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-"""Delete a file from the watch by name. With --keep-one, remove every copy
-but the oldest -- MTP happily accepts the same filename twice, and a watch
-with duplicate .prg files behaves unpredictably."""
+"""Delete a file from the watch by name.
+
+WARNING about --keep-one: on this Forerunner the same filename showing twice
+is an index artifact of ONE file, not two files. Deleting the "duplicate"
+removes the file itself. Only use --keep-one if you have confirmed against the
+watch's own app list that there really are two apps; otherwise you will
+uninstall what you just installed.
+
+The device's file index is also stale for tens of seconds after a write, so a
+listing that omits a file is not evidence the file is gone."""
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mtp_common import open_device, files, lib

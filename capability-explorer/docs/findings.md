@@ -81,7 +81,16 @@ Two gotchas found the hard way:
 - `gvfsd-mtp` must not hold the device, but kill it with `pkill -x`, never
   `pkill -f` — the `-f` pattern also matches the shell running the command,
   which kills your own script mid-run.
-- MTP accepts the **same filename twice**, silently. After a failed-looking
-  push, always re-list before pushing again; the device's file index also goes
-  briefly stale right after a write, so an empty listing is not proof of
-  absence. `tools/mtp_rm.py <name> --keep-one` cleans up duplicates.
+- The device's file index is **stale for tens of seconds** after a write. A
+  listing that omits a file you just pushed is not evidence the push failed —
+  wait and list again before concluding anything. Several apparent failures
+  here were nothing but this.
+- A file that has been overwritten shows up as **two entries with the same
+  name and size but different item ids**. They are not two files. Deleting
+  either one removes the file outright, and the next listing shows neither —
+  so "tidying up the duplicate" uninstalls the app you just installed. This
+  cost several rounds of confusion before the pattern was clear.
+
+  Consequently `tools/mtp_push.py` pushes over an existing file and leaves the
+  index alone, and `tools/mtp_rm.py --keep-one` carries a warning. Trust the
+  watch's own app list over anything MTP reports.
