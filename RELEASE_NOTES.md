@@ -1,25 +1,30 @@
-## v0.3 — surviving a real route
+## v0.4 — turn direction that works in any language
 
-v0.2 worked in principle; this is about it still working forty minutes into a
-drive.
+Until now the maneuver was read by matching keywords in the instruction text,
+with English, French and German wired in. In any other language every turn
+silently came out as UNKNOWN and the watch fell back to showing bare text.
 
-- **Foreground service while navigating.** Android is free to kill a
-  background process between notifications, and on a long route it eventually
-  will — the relay would then stop silently, mid-route, which is the worst
-  failure mode this app has. It now shows an ongoing notification for the
-  duration of a route and stops when navigation ends.
-- **Automatic reconnection.** If the watch drops off (out of range, a
-  Bluetooth blip) the relay forgets the dead handle and re-picks the device on
-  the next instruction, rather than needing you to notice and press
-  *Reconnect* while driving.
-- Requests the Android 13+ notification permission, which the foreground
-  service depends on.
+The icon Maps draws next to the instruction carries the same information and
+does not care what language the phone is set to, so it is now used as the
+fallback.
+
+- **Icon-based direction detection.** Measures where the arrow's ink actually
+  sits — horizontal centre of mass, weighted toward the arrowhead — rather
+  than comparing against reference images. That means no bundled icon set to
+  keep in step with Google's redesigns, and it survives restyling.
+- Text still runs first, because it distinguishes the finer cases the icon
+  cannot: slight vs sharp, roundabout, merge, fork.
+- The status screen now counts how often the icon rescued a turn the keywords
+  could not name. If that number climbs on your phone, the keyword list is not
+  pulling its weight for your language.
+- Ambiguous or unreadable icons return UNKNOWN rather than guessing; the watch
+  shows the instruction text, which is still perfectly usable.
 
 ### Install
 
 1. Download `maps-relay.apk` below on the phone and open it.
 2. Grant notification access, and allow notifications when asked.
-3. `maps-relay-v0.3.prg` is the watch app — copy it into `GARMIN/Apps/` over
+3. `maps-relay-v0.4.prg` is the watch app — copy it into `GARMIN/Apps/` over
    USB, or run `make sideload` from the repo.
 
 Garmin Connect Mobile must be installed and paired; it is the transport.

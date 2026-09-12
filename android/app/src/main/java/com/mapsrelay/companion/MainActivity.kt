@@ -124,6 +124,7 @@ class MainActivity : Activity() {
             appendLine("last send result    : ${WatchRelay.lastSent}")
             appendLine("navigation active   : ${Status.navActive}")
             appendLine("messages relayed    : ${Status.sentCount}")
+            appendLine("maneuver from icon  : ${Status.iconFallbacks}")
             appendLine("last payload        : ${Status.lastPayload}")
         }
     }

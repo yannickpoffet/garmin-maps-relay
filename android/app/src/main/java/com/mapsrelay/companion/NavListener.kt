@@ -116,7 +116,15 @@ class NavListener : NavigationListener() {
         val distanceText = data.nextDirection.navigationDistance?.localeString ?: ""
         val distanceMeters = metersOf(data)
         val eta = data.eta.localeString ?: ""
-        val maneuver = Maneuver.fromText(instruction)
+        // Text first: when the language matches it distinguishes the fine
+        // cases (slight/sharp/roundabout/merge) that the icon cannot. The icon
+        // then covers every language the keyword list does not, which is most
+        // of them.
+        var maneuver = Maneuver.fromText(instruction)
+        if (maneuver == Maneuver.UNKNOWN) {
+            maneuver = IconClassifier.classify(data.actionIcon.bitmap)
+            if (maneuver != Maneuver.UNKNOWN) Status.iconFallbacks++
+        }
         val bucket = bucketOf(distanceMeters)
 
         val changed = maneuver != lastManeuver ||
@@ -185,4 +193,9 @@ object Status {
     @Volatile var navActive = false
     @Volatile var sentCount = 0
     @Volatile var lastPayload = "-"
+
+    /** How often the icon rescued a maneuver the keywords could not name.
+     *  Surfaced in the UI because it is the honest measure of whether the
+     *  keyword list is adequate for this phone's language. */
+    @Volatile var iconFallbacks = 0
 }
