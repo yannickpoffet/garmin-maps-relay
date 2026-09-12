@@ -1,0 +1,178 @@
+import Toybox.Graphics;
+import Toybox.Lang;
+import Toybox.System;
+import Toybox.Timer;
+import Toybox.WatchUi;
+
+//! Renders the current instruction: a big turn arrow, the distance to it, the
+//! street, and the ETA.
+//!
+//! There is deliberately no map. fr745 does not ship WatchUi.MapView (it is
+//! absent from the SDK's MapSample product list), and the phone notification
+//! carries no geometry anyway — only the next maneuver.
+class NavView extends WatchUi.View {
+
+    private var _state as NavState;
+    private var _debug as Boolean = false;
+    private var _timer as Timer.Timer?;
+    private var _w as Number = 240;
+    private var _h as Number = 240;
+
+    function initialize(state as NavState) {
+        View.initialize();
+        _state = state;
+    }
+
+    function onLayout(dc as Graphics.Dc) as Void {
+        _w = dc.getWidth();
+        _h = dc.getHeight();
+    }
+
+    function onShow() as Void {
+        // Staleness is time-based, so the display has to repaint even when no
+        // message arrives — that is precisely the case it needs to catch.
+        _timer = new Timer.Timer();
+        _timer.start(method(:onTick), 1000, true);
+    }
+
+    function onHide() as Void {
+        if (_timer != null) {
+            _timer.stop();
+            _timer = null;
+        }
+    }
+
+    function onTick() as Void {
+        WatchUi.requestUpdate();
+    }
+
+    function toggleDebug() as Void {
+        _debug = !_debug;
+        WatchUi.requestUpdate();
+    }
+
+    function onUpdate(dc as Graphics.Dc) as Void {
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+        dc.clear();
+
+        if (_debug) {
+            drawDebug(dc);
+            return;
+        }
+        if (!_state.everReceived) {
+            drawCentered(dc, "waiting for phone", Graphics.COLOR_DK_GRAY);
+            return;
+        }
+        drawNav(dc);
+    }
+
+    //! Grey everything once the feed goes quiet. A stale turn shown in
+    //! confident white is worse than an obvious warning.
+    function drawNav(dc as Graphics.Dc) as Void {
+        var stale = _state.isStale();
+        var fg = stale ? Graphics.COLOR_DK_GRAY : Graphics.COLOR_WHITE;
+        var accent = stale ? Graphics.COLOR_DK_GRAY : Graphics.COLOR_GREEN;
+
+        var cx = _w / 2;
+
+        // Arrow occupies the upper half.
+        var arrowSize = (_h * 0.34).toNumber();
+        Maneuver.draw(dc, _state.maneuver, cx, (_h * 0.30).toNumber(), arrowSize, accent);
+
+        // Distance to the maneuver is the number you actually act on, so it
+        // gets the largest type on the screen.
+        if (!_state.distance.equals("")) {
+            dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, (_h * 0.46).toNumber(), Graphics.FONT_NUMBER_MEDIUM,
+                        _state.distance, Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
+        dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, (_h * 0.68).toNumber(), Graphics.FONT_SMALL,
+                    fit(dc, _state.street, Graphics.FONT_SMALL, (_w * 0.82).toNumber()),
+                    Graphics.TEXT_JUSTIFY_CENTER);
+
+        var footer = stale ? "no signal" : _state.eta;
+        dc.setColor(stale ? Graphics.COLOR_ORANGE : Graphics.COLOR_LT_GRAY,
+                    Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, (_h * 0.80).toNumber(), Graphics.FONT_XTINY,
+                    footer, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    //! Raw payload plus age — the M0 acceptance test is read from this screen.
+    function drawDebug(dc as Graphics.Dc) as Void {
+        var lh = dc.getFontHeight(Graphics.FONT_XTINY);
+        var y = lh;
+        dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(_w / 2, y, Graphics.FONT_XTINY, "RAW", Graphics.TEXT_JUSTIFY_CENTER);
+        y += lh;
+
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        var text = _state.everReceived ? _state.raw : "(nothing received)";
+        var lines = wrap(dc, text, Graphics.FONT_XTINY, (_w * 0.78).toNumber(), 7);
+        for (var i = 0; i < lines.size(); i++) {
+            dc.drawText(_w / 2, y, Graphics.FONT_XTINY, lines[i], Graphics.TEXT_JUSTIFY_CENTER);
+            y += lh;
+        }
+
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        var age = _state.ageSec();
+        dc.drawText(_w / 2, _h - 2 * lh, Graphics.FONT_XTINY,
+                    (age < 0) ? "age -" : ("age " + age.toString() + "s"),
+                    Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    function drawCentered(dc as Graphics.Dc, text as String, color as Graphics.ColorType) as Void {
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(_w / 2, _h / 2, Graphics.FONT_SMALL, text,
+                    Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+    }
+
+    //! Truncate with an ellipsis so a long street name cannot overflow the
+    //! round screen and collide with the bezel.
+    function fit(dc as Graphics.Dc, text as String, font as Graphics.FontDefinition,
+                 maxW as Number) as String {
+        if (dc.getTextWidthInPixels(text, font) <= maxW) { return text; }
+        var s = text;
+        while (s.length() > 1 && dc.getTextWidthInPixels(s + "...", font) > maxW) {
+            s = s.substring(0, s.length() - 1) as String;
+        }
+        return s + "...";
+    }
+
+    //! Greedy word wrap, capped at maxLines.
+    function wrap(dc as Graphics.Dc, text as String, font as Graphics.FontDefinition,
+                  maxW as Number, maxLines as Number) as Array<String> {
+        var out = [] as Array<String>;
+        var line = "";
+        var words = split(text, " ");
+        for (var i = 0; i < words.size(); i++) {
+            var candidate = line.equals("") ? words[i] : (line + " " + words[i]);
+            if (dc.getTextWidthInPixels(candidate, font) <= maxW) {
+                line = candidate;
+            } else {
+                if (!line.equals("")) { out.add(line); }
+                line = words[i];
+                if (out.size() >= maxLines) { return out; }
+            }
+        }
+        if (!line.equals("") && out.size() < maxLines) { out.add(line); }
+        return out;
+    }
+
+    function split(text as String, sep as String) as Array<String> {
+        var out = [] as Array<String>;
+        var cur = "";
+        for (var i = 0; i < text.length(); i++) {
+            var ch = text.substring(i, i + 1) as String;
+            if (ch.equals(sep)) {
+                out.add(cur);
+                cur = "";
+            } else {
+                cur += ch;
+            }
+        }
+        out.add(cur);
+        return out;
+    }
+}

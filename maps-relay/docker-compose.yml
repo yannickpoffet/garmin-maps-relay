@@ -1,0 +1,20 @@
+services:
+  connectiq:
+    build:
+      context: .
+      args:
+        UID: ${CIQ_UID:-1000}
+        GID: ${CIQ_GID:-1000}
+    image: connectiq-sdk:9.2.0
+    volumes:
+      - ./:/project
+      # SDK, device targets and the signing key all live on the host, so the
+      # container stays disposable and VS Code can still see the sources.
+      - ${HOME}/.Garmin:/home/dev/.Garmin
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - HOME=/home/dev
+    network_mode: host
+    stdin_open: true
+    tty: true

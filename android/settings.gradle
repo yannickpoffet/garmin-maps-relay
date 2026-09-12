@@ -1,0 +1,14 @@
+pluginManagement {
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        // GMapsParser is published only via JitPack.
+        maven { url 'https://jitpack.io' }
+    }
+}
+rootProject.name = "MapsRelay"
+include ':app'

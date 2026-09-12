@@ -1,0 +1,6 @@
+bin/
+*.prg
+*.der
+*.pem
+.env
+__pycache__/
