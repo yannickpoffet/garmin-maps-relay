@@ -69,12 +69,23 @@ jobs:
             --notes-file RELEASE_NOTES.md \
             || gh release upload "$TAG" maps-relay.apk --clobber
 
+      # Update in place rather than delete-and-recreate. Deleting the release
+      # leaves the tag behind for a moment, and `gh release create` then fails
+      # with "a release with the same tag name already exists" -- which is
+      # exactly what happened on the v0.9 build, after the APK had been built
+      # successfully. Uploading over the existing asset has no such race, and
+      # keeps the tag and its URL stable between builds.
       - name: Refresh rolling APK release
         if: "!startsWith(github.ref, 'refs/tags/v')"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete apk -y --cleanup-tag 2>/dev/null || true
-          gh release create apk maps-relay.apk \
-            --title "Maps Relay APK (latest)" \
-            --notes "Debug build from ${GITHUB_SHA:0:7}. Download maps-relay.apk on your phone and open it."
+          NOTES="Debug build from ${GITHUB_SHA:0:7}. Download maps-relay.apk on your phone and open it."
+          if gh release view apk >/dev/null 2>&1; then
+            gh release upload apk maps-relay.apk --clobber
+            gh release edit apk --notes "$NOTES"
+          else
+            gh release create apk maps-relay.apk \
+              --title "Maps Relay APK (latest)" \
+              --notes "$NOTES"
+          fi
