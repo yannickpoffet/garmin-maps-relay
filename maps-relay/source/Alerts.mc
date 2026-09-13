@@ -19,18 +19,36 @@ class Alerts {
     private var _armed as Array<Boolean> = [true, true] as Array<Boolean>;
     private var _lastKey as String = "";
 
+    //! Off route fires once on entry, not on every repaint while it persists.
+    //! The key does not change for as long as you stay off route, so this
+    //! flag is what stops it repeating; it clears when the key does.
+    private var _offRouteFired as Boolean = false;
+
     function initialize() {
     }
 
     //! Call on every state update. `key` identifies the current maneuver
     //! (maneuver code + street); when it changes the thresholds re-arm for the
     //! new turn.
-    function update(key as String, meters as Number, isArrival as Boolean) as Void {
+    function update(key as String, meters as Number, isArrival as Boolean,
+                    isOffRoute as Boolean) as Void {
         if (!key.equals(_lastKey)) {
             _lastKey = key;
             for (var i = 0; i < _armed.size(); i++) {
                 _armed[i] = true;
             }
+            _offRouteFired = false;
+        }
+
+        // Before the distance thresholds: leaving the route is the one event
+        // worth feeling immediately, and `meters` is meaningless here anyway.
+        // Four pulses, distinct from the thresholds (1, 2) and arrival (3).
+        if (isOffRoute) {
+            if (!_offRouteFired) {
+                _offRouteFired = true;
+                fire(4);
+            }
+            return;
         }
 
         if (isArrival) {

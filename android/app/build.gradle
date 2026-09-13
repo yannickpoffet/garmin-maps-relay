@@ -9,8 +9,9 @@ android {
 
     defaultConfig {
         applicationId "com.mapsrelay.companion"
-        // NotificationListenerService predates this, but GMapsParser uses
-        // java.time, so 26 is the practical floor.
+        // Well below anything this app is actually run on; kept at 26 because
+        // nothing needs it lower. (It was pinned here by GMapsParser's use of
+        // java.time, which v0.8 removed.)
         minSdk 26
         targetSdk 34
         versionCode 1
@@ -37,6 +38,13 @@ android {
         }
     }
 
+    // Off by default from AGP 8. The vendored OsmAnd contract in src/main/aidl
+    // is the whole reason this app can read turn data, so without this nothing
+    // compiles.
+    buildFeatures {
+        aidl true
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -59,8 +67,8 @@ dependencies {
     // Transport to the watch. Requires Garmin Connect Mobile installed.
     implementation "com.garmin.connectiq:ciq-companion-app-sdk:2.2.0@aar"
 
-    // No notification-parsing library: GMapsParser inflates the notification's
-    // RemoteViews, which fails on every notification on Android 14 because
-    // Maps uses the standard template. MapsNotificationParser reads the
-    // documented extras instead. See docs in that file.
+    // Turn data comes from OsmAnd over AIDL. The contract is vendored in
+    // src/main/aidl rather than pulled from net.osmand:android-aidl-lib, which
+    // is an unpinned snapshot on a third-party host; see src/main/aidl/README.md.
+    // Nothing to declare here - AIDL is compiled from source.
 }

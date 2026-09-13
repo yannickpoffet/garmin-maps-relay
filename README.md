@@ -21,25 +21,43 @@ a watch-app, and why side-loading cannot go through gvfs on Ubuntu 25.04.
 
 ## [maps-relay/](maps-relay/) + [android/](android/)
 
-Shows Google Maps turn-by-turn directions from the phone on the watch.
+Shows OsmAnd turn-by-turn directions from the phone on the watch.
 
 ```
-Google Maps (Android)
-  └─ ongoing navigation notification
-      └─ NavListener (NotificationListenerService, parsing via GMapsParser)
-          └─ throttle + dedupe
-              └─ Connect IQ SDK ──▶ Garmin Connect Mobile ──BLE──▶ watch
-                                                                    └─ NavView
+OsmAnd (Android)
+  ├─ AIDL updateNavigationInfo ──▶ maneuver + metres   (typed; drives sends)
+  └─ ongoing notification ───────▶ street + ETA        (best effort; cached)
+                  │
+                  └─ NavListener: throttle + dedupe
+                      └─ Connect IQ SDK ──▶ Garmin Connect ──BLE──▶ watch
+                                                                     └─ NavView
 ```
 
-Google publishes no API for live guidance, so the notification is the only
-source — which also means this is Android-only and inherently fragile to Maps
-updates. The `fr745` has no `WatchUi.MapView`, so there is no moving map: turn
-arrow, distance, street and ETA, which is all the notification carries anyway.
+This used to read Google Maps' navigation notification. Maps publishes no
+guidance API, so the only way in was to intercept a notification written for
+human eyes and reverse-engineer it — and it broke twice: v0.7 on `RemoteViews`
+inflation, v0.8 on assuming the title held what the notification *renders* as.
+The maneuver was never in there as data at all; it arrived as an icon bitmap
+that had to be classified from its pixels.
+
+OsmAnd exposes a documented AIDL interface instead. `registerForNavigationUpdates`
+pushes `ADirectionInfo{distanceTo, turnType}` on every turn change, so the two
+fields the arrow and the haptics depend on are integers from an app that means
+to provide them. The notification is demoted to street and ETA, which it can
+lose without costing you a turn.
+
+The trade is real: no traffic-aware ETA, weaker destination search, and offline
+maps must be downloaded in OsmAnd first. The `fr745` has no `WatchUi.MapView`,
+so there is still no moving map — turn arrow, distance, street and ETA.
 
 The maneuver codes in `maps-relay/source/Maneuver.mc` and
 `android/app/src/main/java/com/mapsrelay/companion/Maneuver.kt` are the contract
-between the two halves and must stay in step.
+between the two halves and must stay in step. `Maneuver.fromTurnType` maps
+OsmAnd's `TurnType` onto them.
+
+OsmAnd's AIDL contract is vendored under `android/app/src/main/aidl/` rather
+than pulled from a dependency — see the README there for why, and how to
+refresh it.
 
 ### Seeing the arrows without the simulator
 
@@ -82,11 +100,12 @@ touching `android/` publishes a debug APK to the `apk` release; download
 
 ## Phone setup
 
-1. Install the APK from the `apk` release.
-2. Open Maps Relay, tap **Grant notification access**, enable it.
-3. Garmin Connect Mobile must be installed, signed in and paired — it is the
+1. Install **OsmAnd** and download the offline maps for your area.
+2. Install the APK from the `apk` release.
+3. Open Maps Relay, tap **Grant notification access**, enable it.
+4. Garmin Connect Mobile must be installed, signed in and paired — it is the
    transport, there is no alternative.
-4. Open **Maps Relay** on the watch, then start navigating in Google Maps.
+5. Open **Maps Relay** on the watch, then start navigating in OsmAnd.
 
 Tap **Send test message to watch** to check the link before trusting it on a
 route.

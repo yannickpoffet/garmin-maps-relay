@@ -1,42 +1,57 @@
-## v0.10 — the foreground service can actually start
+## v0.9 — OsmAnd instead of Google Maps
 
-Verified against a live route on a Xiaomi phone over adb. Parsing is confirmed
-working:
+v0.7 and v0.8 were both spent fixing the same class of bug: Google Maps
+publishes no guidance API, so the only way to see a turn was to intercept the
+notification it writes for human eyes and reverse-engineer it. v0.7 broke on
+`RemoteViews` inflation. v0.8 broke on assuming the title held what the
+notification *renders* as. And the maneuver — the single most important field —
+was never in there as data at all. It arrived as an icon bitmap, which
+`IconClassifier` had to read pixel by pixel.
 
-```
-last payload : {m=1, d=0 m, s=toward Neuweilerpl., e=10:32 AM, dm=0}
-```
+**OsmAnd has a front door.** `registerForNavigationUpdates` over AIDL pushes
+`ADirectionInfo{distanceTo, turnType, isLeftSide}` every time the next turn
+changes. The two fields the arrow and the haptics depend on are now integers,
+handed over by an app that means to hand them over.
 
-Instruction from `android.text`, distance from `android.title`, ETA from
-`android.subText` with the AM/PM kept, distance parsed to a number, and the
-maneuver read from the notification icon. `maps notifs seen: 7`,
-`messages relayed: 4`, `last error: -`.
+- **Turn and distance are typed.** `Maneuver.fromTurnType` maps OsmAnd's
+  `TurnType` onto the existing enum, almost 1:1. No keyword matching, no
+  pixel classification. `IconClassifier.kt` and `MapsNotificationParser.kt`
+  are gone — about 270 lines.
+- **Street and ETA are demoted.** They still come from a notification, but it
+  is now the only thing that depends on one, and losing it costs you a street
+  line rather than a turn. The parser makes no assumption about which field
+  holds what; it scans all of them.
+- **Off route** is reported for the first time. Google Maps never exposed it.
+  New `OFF_ROUTE` maneuver, a crossed-strokes glyph on the watch, and a
+  four-pulse buzz on entering the state — distinct from the proximity
+  thresholds (1, 2) and arrival (3).
+- **The distance string is formatted on the phone from metres**, not lifted
+  from localised notification text, so the watch reads the same units wherever
+  the phone is set.
+- **The AIDL contract is vendored**, not pulled from
+  `net.osmand:android-aidl-lib:master-snapshot` — an unpinned snapshot on a
+  third-party host would have put the CI build at its mercy. See
+  `android/app/src/main/aidl/README.md`.
 
-What logcat exposed along the way:
+### The trade
 
-```
-SecurityException: Starting FGS with type connectedDevice ... requires
-  allOf=[FOREGROUND_SERVICE_CONNECTED_DEVICE]
-  anyOf=[BLUETOOTH_ADVERTISE, BLUETOOTH_CONNECT, BLUETOOTH_SCAN,
-         CHANGE_NETWORK_STATE, ...]
-```
+Navigation happens in **OsmAnd**, not Google Maps: no traffic-aware ETA, weaker
+destination search, and offline maps have to be downloaded first. In exchange
+the arrow stops being a guess.
 
-`connectedDevice` looked like the honest type, but Android 14 also demands one
-of those `anyOf` permissions, and this app holds none of them — the Bluetooth
-link belongs to Garmin Connect, not to us. Claiming `BLUETOOTH_CONNECT` to
-satisfy a type check would have been a permission grab for something the app
-never does.
+### Known gaps
 
-- **The service now declares `specialUse`** with a subtype property stating
-  what it is for, which needs no permission the app has no business holding.
-- **Foreground failures are surfaced** in `last error` instead of only logcat.
-  This failed on every notification and was invisible from the phone.
-
-The relay kept working throughout — `startForeground` failing only means the
-process is more killable, not that relaying stops.
+- `ARRIVE` has no `TurnType`; it is still inferred from the notification.
+- `MERGE` is unreachable — no OsmAnd equivalent. The glyph stays for Demo.
+- Roundabout exit number is lost: `turnType` is a bare int, so "take the 2nd
+  exit" becomes just "roundabout".
 
 ### Install
 
-Installs straight over v0.9; no uninstall needed.
+1. Install **OsmAnd** (`net.osmand`) and download your offline maps.
+2. Download `maps-relay.apk` below on the phone and open it.
+3. Grant notification access, and allow notifications when asked.
+4. **Reflash the watch app** — `OFF_ROUTE` changes the maneuver contract, so
+   v0.5's watch build no longer matches.
 
 Garmin Connect Mobile must be installed and paired; it is the transport.

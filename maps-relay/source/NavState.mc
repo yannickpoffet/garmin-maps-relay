@@ -24,6 +24,11 @@ class NavState {
     //! True when this is the final "you have arrived" instruction.
     public var arrived as Boolean = false;
 
+    //! True when the route has been left. Distinct from staleness: the link is
+    //! fine and the instruction is current, it just says you are not on the
+    //! route any more.
+    public var offRoute as Boolean = false;
+
     //! Raw payload as received, kept for the M0 debug view.
     public var raw as String = "";
 
@@ -54,6 +59,7 @@ class NavState {
             eta      = asString(d.get("e"));
             meters   = asNumber(d.get("dm"), -1);
             arrived  = (maneuver == Maneuver.ARRIVE);
+            offRoute = (maneuver == Maneuver.OFF_ROUTE);
         } else {
             // Not a nav payload — show it as the street line so M0 can be
             // verified without the parser existing yet.
@@ -63,6 +69,7 @@ class NavState {
             eta = "";
             meters = -1;
             arrived = false;
+            offRoute = false;
         }
     }
 

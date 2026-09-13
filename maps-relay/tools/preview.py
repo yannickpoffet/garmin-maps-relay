@@ -36,14 +36,15 @@ BLUE = (0, 170, 255)
 ORANGE = (255, 170, 0)
 
 UNKNOWN, STRAIGHT, LEFT, RIGHT, SLIGHT_LEFT, SLIGHT_RIGHT, SHARP_LEFT, \
-    SHARP_RIGHT, UTURN, ROUNDABOUT, MERGE, FORK_LEFT, FORK_RIGHT, ARRIVE = range(14)
+    SHARP_RIGHT, UTURN, ROUNDABOUT, MERGE, FORK_LEFT, FORK_RIGHT, ARRIVE, \
+    OFF_ROUTE = range(15)
 
 NAMES = {
     UNKNOWN: "unknown", STRAIGHT: "straight", LEFT: "left", RIGHT: "right",
     SLIGHT_LEFT: "slight left", SLIGHT_RIGHT: "slight right",
     SHARP_LEFT: "sharp left", SHARP_RIGHT: "sharp right", UTURN: "u-turn",
     ROUNDABOUT: "roundabout", MERGE: "merge", FORK_LEFT: "fork left",
-    FORK_RIGHT: "fork right", ARRIVE: "arrive",
+    FORK_RIGHT: "fork right", ARRIVE: "arrive", OFF_ROUTE: "off route",
 }
 
 
@@ -174,6 +175,14 @@ def draw_maneuver(d, m, cx, cy, size, color):
         d.ellipse([cx - r // 3, py - r // 3, cx + r // 3, py + r // 3], fill=color)
         seg(d, cx, py + r, cx, base_y, max(t // 2, 2), color)
 
+    elif m == OFF_ROUTE:
+        # Two crossed strokes. Deliberately not an arrow: once the route has
+        # been left there is no direction to give, and anything arrow-shaped
+        # here would be read as one.
+        xr = h * 0.72
+        seg(d, cx - xr, cy - xr, cx + xr, cy + xr, t, color)
+        seg(d, cx + xr, cy - xr, cx - xr, cy + xr, t, color)
+
 
 def fit(d, text, f, max_w):
     """Mirror of NavView.fit - truncate with an ellipsis."""
@@ -267,6 +276,7 @@ def sheet():
         (MERGE, "600 m", "A1 direction Bern", "13:09"),
         (FORK_LEFT, "700 m", "Sortie 12", "13:12"),
         (UNKNOWN, "150 m", "Unrecognised maneuver", "13:15"),
+        (OFF_ROUTE, "", "Off route", ""),
         (ARRIVE, "", "Destination", "13:20"),
     ]
     cols, pad = 5, 14

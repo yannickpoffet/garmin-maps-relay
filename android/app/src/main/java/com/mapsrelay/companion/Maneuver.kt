@@ -19,40 +19,56 @@ object Maneuver {
     const val FORK_LEFT = 11
     const val FORK_RIGHT = 12
     const val ARRIVE = 13
+    const val OFF_ROUTE = 14
 
     /**
-     * Best-effort maneuver from the instruction text.
+     * OsmAnd's `net.osmand.router.TurnType` constants.
      *
-     * Google Maps ships the maneuver as an icon bitmap, not as a code, so
-     * there is no clean way to read it — classifying the bitmap would be the
-     * rigorous approach and is the obvious later improvement. Until then this
-     * matches keywords in the languages most likely on this phone (en/fr/de).
-     *
-     * Returning UNKNOWN is safe and expected: the watch then shows the
-     * instruction text alone, which is still perfectly usable.
+     * Repeated here rather than imported: they live in OsmAnd's routing core,
+     * which is not part of the AIDL contract we vendor. They are stable — the
+     * values are persisted in OsmAnd's own route data — but if a turn ever
+     * renders as the wrong arrow, check this list against upstream first.
      */
-    fun fromText(textIn: String?): Int {
-        val t = textIn?.lowercase() ?: return UNKNOWN
+    private const val T_C = 1        // continue straight
+    private const val T_TL = 2       // turn left
+    private const val T_TSLL = 3     // turn slightly left
+    private const val T_TSHL = 4     // turn sharply left
+    private const val T_TR = 5       // turn right
+    private const val T_TSLR = 6     // turn slightly right
+    private const val T_TSHR = 7     // turn sharply right
+    private const val T_KL = 8       // keep left
+    private const val T_KR = 9       // keep right
+    private const val T_TU = 10      // U-turn
+    private const val T_TRU = 11     // right-hand U-turn
+    private const val T_OFFR = 12    // off route
+    private const val T_RNDB = 13    // roundabout
+    private const val T_RNLB = 14    // roundabout, left-hand traffic
 
-        // Order matters: "slight left" must be tested before plain "left".
-        return when {
-            has(t, "arrive", "arrivé", "arrivee", "destination", "ziel") -> ARRIVE
-            has(t, "u-turn", "make a u", "demi-tour", "wenden") -> UTURN
-            has(t, "roundabout", "rond-point", "giratoire", "kreisverkehr") -> ROUNDABOUT
-            has(t, "merge", "insérez", "inserez", "einfädeln", "einfadeln") -> MERGE
-            has(t, "slight left", "légèrement à gauche", "legerement a gauche") -> SLIGHT_LEFT
-            has(t, "slight right", "légèrement à droite", "legerement a droite") -> SLIGHT_RIGHT
-            has(t, "sharp left", "franchement à gauche", "scharf links") -> SHARP_LEFT
-            has(t, "sharp right", "franchement à droite", "scharf rechts") -> SHARP_RIGHT
-            has(t, "keep left", "fork left", "serrez à gauche", "links halten") -> FORK_LEFT
-            has(t, "keep right", "fork right", "serrez à droite", "rechts halten") -> FORK_RIGHT
-            has(t, "left", "gauche", "links") -> LEFT
-            has(t, "right", "droite", "rechts") -> RIGHT
-            has(t, "straight", "continue", "tout droit", "geradeaus") -> STRAIGHT
-            else -> UNKNOWN
-        }
+    /**
+     * Map an OsmAnd turn type onto our code.
+     *
+     * This is the whole point of moving to OsmAnd: the maneuver arrives as an
+     * integer that means something, rather than being guessed from keyword
+     * matching on localised prose and then, failing that, from the pixels of an
+     * icon bitmap. Both of those are gone.
+     *
+     * `MERGE` has no TurnType and is now unreachable; the code and its arrow
+     * stay so the watch can still be exercised through Demo. `ARRIVE` is not a
+     * TurnType either — it comes from the notification instead.
+     */
+    fun fromTurnType(turnType: Int): Int = when (turnType) {
+        T_C -> STRAIGHT
+        T_TL -> LEFT
+        T_TSLL -> SLIGHT_LEFT
+        T_TSHL -> SHARP_LEFT
+        T_TR -> RIGHT
+        T_TSLR -> SLIGHT_RIGHT
+        T_TSHR -> SHARP_RIGHT
+        T_KL -> FORK_LEFT
+        T_KR -> FORK_RIGHT
+        T_TU, T_TRU -> UTURN
+        T_OFFR -> OFF_ROUTE
+        T_RNDB, T_RNLB -> ROUNDABOUT
+        else -> UNKNOWN
     }
-
-    private fun has(haystack: String, vararg needles: String) =
-        needles.any { haystack.contains(it) }
 }

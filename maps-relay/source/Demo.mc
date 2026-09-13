@@ -13,7 +13,7 @@ import Toybox.Lang;
 module Demo {
 
     function count() as Number {
-        return 13;
+        return 14;
     }
 
     //! Same compact dictionary the phone sends, so this drives the real
@@ -47,6 +47,10 @@ module Demo {
             // No drawing for UNKNOWN: checks that the text alone still reads.
             case 11: return { "m" => Maneuver.UNKNOWN,      "d" => "150 m",  "dm" => 150,
                               "s" => "Unrecognised maneuver","e" => "13:15" };
+            // dm = -1 deliberately: off route has no distance to a turn, and
+            // the thresholds in Alerts must not fire on it.
+            case 12: return { "m" => Maneuver.OFF_ROUTE,    "d" => "",       "dm" => -1,
+                              "s" => "Off route",            "e" => "" };
         }
         return { "m" => Maneuver.ARRIVE, "d" => "", "dm" => 0,
                  "s" => "Destination", "e" => "13:20" };

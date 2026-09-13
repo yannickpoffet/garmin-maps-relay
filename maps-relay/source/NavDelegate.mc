@@ -22,7 +22,7 @@ class NavDelegate extends WatchUi.BehaviorDelegate {
     function onNextPage() as Boolean {
         _demoIndex++;
         _state.apply(Demo.sample(_demoIndex));
-        _alerts.update(_state.key(), _state.meters, _state.arrived);
+        _alerts.update(_state.key(), _state.meters, _state.arrived, _state.offRoute);
         WatchUi.requestUpdate();
         return true;
     }
@@ -31,7 +31,7 @@ class NavDelegate extends WatchUi.BehaviorDelegate {
         _demoIndex--;
         if (_demoIndex < 0) { _demoIndex = Demo.count() - 1; }
         _state.apply(Demo.sample(_demoIndex));
-        _alerts.update(_state.key(), _state.meters, _state.arrived);
+        _alerts.update(_state.key(), _state.meters, _state.arrived, _state.offRoute);
         WatchUi.requestUpdate();
         return true;
     }

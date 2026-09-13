@@ -42,7 +42,7 @@ class NavApp extends Application.AppBase {
         _state.apply(msg.data);
         // Alerting belongs here rather than in the view: onUpdate runs on a
         // timer and would re-trigger the haptics on every repaint.
-        _alerts.update(_state.key(), _state.meters, _state.arrived);
+        _alerts.update(_state.key(), _state.meters, _state.arrived, _state.offRoute);
         WatchUi.requestUpdate();
     }
 }

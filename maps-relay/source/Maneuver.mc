@@ -32,7 +32,12 @@ module Maneuver {
         MERGE        = 10,
         FORK_LEFT    = 11,
         FORK_RIGHT   = 12,
-        ARRIVE       = 13
+        ARRIVE       = 13,
+
+        //! The route has been left. OsmAnd reports this as TurnType.OFFR;
+        //! nothing in a Google Maps notification ever did, which is why it
+        //! arrived later than the rest.
+        OFF_ROUTE    = 14
     }
 
     //! Arrowhead proportions, in multiples of the stroke width. At icon sizes
@@ -58,6 +63,7 @@ module Maneuver {
             case FORK_LEFT:    return "fork left";
             case FORK_RIGHT:   return "fork right";
             case ARRIVE:       return "arrive";
+            case OFF_ROUTE:    return "off route";
         }
         return "";
     }
@@ -229,6 +235,15 @@ module Maneuver {
                 dc.setPenWidth(1);
                 dc.fillCircle(cx, py.toNumber(), (pr / 3).toNumber());
                 seg(dc, fcx, py + pr, fcx, baseY, ringWidth(t));
+                break;
+
+            case OFF_ROUTE:
+                // Two crossed strokes. Deliberately not an arrow: once the
+                // route has been left there is no direction to give, and
+                // anything arrow-shaped here would be read as one.
+                var xr = fh * 0.72;
+                seg(dc, fcx - xr, fcy - xr, fcx + xr, fcy + xr, t);
+                seg(dc, fcx + xr, fcy - xr, fcx - xr, fcy + xr, t);
                 break;
 
             default:

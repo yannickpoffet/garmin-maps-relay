@@ -18,9 +18,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Package visibility is filtered on Android 11+. OsmAnd has to be
+         listed or getPackageInfo() reports it missing even when it is plainly
+         installed, and the AIDL bind then never happens. All three build
+         flavours, since any of them can be the one present. -->
     <queries>
         <package android:name="com.garmin.android.apps.connectmobile" />
-        <package android:name="com.google.android.apps.maps" />
+        <package android:name="net.osmand" />
+        <package android:name="net.osmand.plus" />
+        <package android:name="net.osmand.dev" />
     </queries>
 
     <application
@@ -38,9 +44,11 @@
             </intent-filter>
         </activity>
 
-        <!-- Reading another app's notifications requires this permission and
-             an explicit grant by the user in system settings; it cannot be
-             requested from inside the app. -->
+        <!-- Still a notification listener, but only for the street name and
+             ETA now: the maneuver and the distance come from OsmAnd's AIDL
+             service instead. Reading another app's notifications requires this
+             permission and an explicit grant by the user in system settings;
+             it cannot be requested from inside the app. -->
         <service
             android:name=".NavListener"
             android:exported="true"
@@ -49,7 +57,7 @@
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Relays Google Maps navigation guidance to a paired Garmin watch for the duration of a route." />
+                android:value="Relays OsmAnd navigation guidance to a paired Garmin watch for the duration of a route." />
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>

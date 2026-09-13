@@ -75,9 +75,10 @@ class MainActivity : Activity() {
         }, lp())
 
         root.addView(Button(this).apply {
-            text = "Reconnect watch"
+            text = "Reconnect watch and OsmAnd"
             setOnClickListener {
                 WatchRelay.start(applicationContext)
+                OsmAndLink.bind(force = true)
                 render()
             }
         }, lp())
@@ -94,6 +95,10 @@ class MainActivity : Activity() {
         requestNotificationPermissionIfNeeded()
         WatchRelay.onStatusChange = { ui.post { render() } }
         WatchRelay.start(applicationContext)
+        // Also started by NavListener; harmless twice, and this way the status
+        // screen is useful before notification access has been granted.
+        OsmAndLink.onStatusChange = { ui.post { render() } }
+        OsmAndLink.start(applicationContext)
     }
 
     override fun onResume() {
@@ -123,10 +128,11 @@ class MainActivity : Activity() {
             appendLine("listener bound      : ${Status.listenerBound}")
             appendLine("watch               : ${WatchRelay.status}")
             appendLine("last send result    : ${WatchRelay.lastSent}")
-            appendLine("maps notifs seen    : ${Status.mapsSeen}  ${Status.lastMapsId}")
+            appendLine("osmand              : ${OsmAndLink.status}")
+            appendLine("osmand notifs seen  : ${Status.osmandNotifsSeen}")
             appendLine("navigation active   : ${Status.navActive}")
+            appendLine("last turn           : ${Status.lastTurnType}")
             appendLine("messages relayed    : ${Status.sentCount}")
-            appendLine("maneuver from icon  : ${Status.iconFallbacks}")
             appendLine("last payload        : ${Status.lastPayload}")
             appendLine("last error          : ${Status.lastError}")
         }
