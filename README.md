@@ -41,6 +41,24 @@ The maneuver codes in `maps-relay/source/Maneuver.mc` and
 `android/app/src/main/java/com/mapsrelay/companion/Maneuver.kt` are the contract
 between the two halves and must stay in step.
 
+### Seeing the arrows without the simulator
+
+The Connect IQ simulator's device panel does not render in this environment,
+which left the turn arrows unverifiable. `maps-relay/tools/preview.py` mirrors
+the `Maneuver.draw` and `NavView` arithmetic and draws the same screens offline
+at the fr745's real 240x240:
+
+```bash
+cd maps-relay && python3 tools/preview.py docs/arrows.png
+```
+
+![turn arrows](maps-relay/docs/arrows.png)
+
+It is a model, not the app: it catches geometry and layout mistakes (heads
+detached from shafts, glyphs that read as the wrong symbol, text overflowing
+the round screen), not Monkey C behaviour. The sequence matches what UP/DOWN
+cycles through on the watch, so the two can be compared directly.
+
 ## Building
 
 **Watch apps** — the SDK runs in a container because the Connect IQ simulator

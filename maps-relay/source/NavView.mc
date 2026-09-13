@@ -79,9 +79,27 @@ class NavView extends WatchUi.View {
 
         var cx = _w / 2;
 
-        // Arrow occupies the upper half.
-        var arrowSize = (_h * 0.34).toNumber();
-        Maneuver.draw(dc, _state.maneuver, cx, (_h * 0.30).toNumber(), arrowSize, accent);
+        if (_state.maneuver == Maneuver.UNKNOWN) {
+            // No arrow to draw, so give the instruction the space instead of
+            // truncating it. This is the fallback for every language the
+            // companion's keyword list does not cover, so it has to stay
+            // readable rather than degrade to "Unrecognised m...".
+            var lines = wrap(dc, _state.street, Graphics.FONT_XTINY,
+                             (_w * 0.72).toNumber(), 3);
+            var lh = dc.getFontHeight(Graphics.FONT_XTINY);
+            var ty = (_h * 0.22).toNumber() - (lines.size() - 1) * lh / 2;
+            dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
+            for (var i = 0; i < lines.size(); i++) {
+                dc.drawText(cx, ty, Graphics.FONT_XTINY, lines[i],
+                            Graphics.TEXT_JUSTIFY_CENTER);
+                ty += lh;
+            }
+        } else {
+            // Arrow occupies the upper half.
+            var arrowSize = (_h * 0.34).toNumber();
+            Maneuver.draw(dc, _state.maneuver, cx, (_h * 0.30).toNumber(),
+                          arrowSize, accent);
+        }
 
         // Distance to the maneuver is the number you actually act on, so it
         // gets the largest type on the screen.
@@ -91,10 +109,14 @@ class NavView extends WatchUi.View {
                         _state.distance, Graphics.TEXT_JUSTIFY_CENTER);
         }
 
-        dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, (_h * 0.68).toNumber(), Graphics.FONT_SMALL,
-                    fit(dc, _state.street, Graphics.FONT_SMALL, (_w * 0.82).toNumber()),
-                    Graphics.TEXT_JUSTIFY_CENTER);
+        // The instruction was already shown above when there is no arrow.
+        if (_state.maneuver != Maneuver.UNKNOWN) {
+            dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, (_h * 0.68).toNumber(), Graphics.FONT_SMALL,
+                        fit(dc, _state.street, Graphics.FONT_SMALL,
+                            (_w * 0.82).toNumber()),
+                        Graphics.TEXT_JUSTIFY_CENTER);
+        }
 
         var footer = stale ? "no signal" : _state.eta;
         dc.setColor(stale ? Graphics.COLOR_ORANGE : Graphics.COLOR_LT_GRAY,
