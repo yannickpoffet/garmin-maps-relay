@@ -36,4 +36,8 @@ dependencies {
     // by hand: the notification format is undocumented and Google changes it,
     // so this is the one part worth delegating to something maintained.
     implementation "com.github.3v1n0.GMapsParser:navparser:0.2.1"
+
+    // Same version navparser uses. Needed on the compile path so its own
+    // swallowed warnings can be routed somewhere visible.
+    implementation "com.jakewharton.timber:timber:4.7.1"
 }

@@ -128,6 +128,7 @@ class MainActivity : Activity() {
             appendLine("messages relayed    : ${Status.sentCount}")
             appendLine("maneuver from icon  : ${Status.iconFallbacks}")
             appendLine("last payload        : ${Status.lastPayload}")
+            appendLine("last error          : ${Status.lastError}")
         }
     }
 

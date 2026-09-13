@@ -7,6 +7,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import timber.log.Timber
 import me.trevi.navparser.lib.NavigationData
 import me.trevi.navparser.lib.NavigationNotification
 import me.trevi.navparser.service.NavigationListener
@@ -30,6 +31,7 @@ class NavListener : NavigationListener() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
+        plantLogBridge()
         // GMapsParser's NavigationListener starts *disabled*: its
         // isGoogleMapsNotification() short-circuits on a `protected var
         // enabled` that defaults to false, so without this every notification
@@ -55,6 +57,24 @@ class NavListener : NavigationListener() {
     override fun onDestroy() {
         stopRelayForeground()
         super.onDestroy()
+    }
+
+    /**
+     * GMapsParser logs through Timber but only plants a tree in its own debug
+     * build, so from a released AAR every warning and swallowed exception goes
+     * nowhere. Planting one here routes them to logcat and to the status
+     * screen — which is how the RemoteViews failure finally became visible.
+     */
+    private fun plantLogBridge() {
+        if (Timber.treeCount() > 0) return
+        Timber.plant(object : Timber.Tree() {
+            override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
+                if (priority >= Log.WARN) {
+                    Status.lastError = message.take(160)
+                }
+                Log.println(priority, tag ?: "navparser", message)
+            }
+        })
     }
 
     private fun createChannel() {
@@ -115,11 +135,46 @@ class NavListener : NavigationListener() {
      * bound", which are otherwise indistinguishable from the outside.
      */
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        if (sbn != null && sbn.packageName.contains("apps.maps")) {
+        if (MapsNotificationParser.isNavigation(sbn)) {
             Status.mapsSeen++
-            Status.lastMapsId = "id=${sbn.id} ongoing=${sbn.isOngoing}"
+            Status.lastMapsId = "id=${sbn!!.id} ongoing=${sbn.isOngoing}"
+            // Our own extras-based read is the primary path. GMapsParser's
+            // RemoteViews inflation fails on modern Maps notifications, and
+            // its failure is silent, so relying on it alone meant relaying
+            // nothing at all.
+            try {
+                val info = MapsNotificationParser.parse(applicationContext, sbn)
+                if (info != null) {
+                    handleParsed(info)
+                }
+            } catch (e: Exception) {
+                Status.lastError = "parse: ${e.message}"
+                Log.w(WatchRelay.TAG, "own parser failed", e)
+            }
         }
         super.onNotificationPosted(sbn)
+    }
+
+    /** Relay a reading from our own parser. */
+    private fun handleParsed(info: MapsNotificationParser.NavInfo) {
+        Status.navActive = true
+        startRelayForeground()
+
+        var maneuver = Maneuver.fromText(info.instruction)
+        if (maneuver == Maneuver.UNKNOWN) {
+            maneuver = IconClassifier.classify(info.icon)
+            if (maneuver != Maneuver.UNKNOWN) Status.iconFallbacks++
+        }
+
+        val bucket = bucketOf(info.meters)
+        if (maneuver == lastManeuver && info.instruction == lastStreet && bucket == lastBucket) {
+            return
+        }
+        send(maneuver, info.distanceText, info.instruction, info.eta,
+             info.meters.toInt(), force = false)
+        lastManeuver = maneuver
+        lastStreet = info.instruction
+        lastBucket = bucket
     }
 
     override fun onNavigationNotificationAdded(navNotification: NavigationNotification) {
@@ -239,6 +294,11 @@ object Status {
      *  arriving but being rejected. */
     @Volatile var mapsSeen = 0
     @Volatile var lastMapsId = "-"
+
+    /** Last warning or error, including ones GMapsParser logs internally via
+     *  Timber. Without a planted tree those vanished, which is what made the
+     *  RemoteViews failure invisible. */
+    @Volatile var lastError = "-"
     @Volatile var sentCount = 0
     @Volatile var lastPayload = "-"
 
