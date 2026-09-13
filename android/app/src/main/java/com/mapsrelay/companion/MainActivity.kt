@@ -98,6 +98,7 @@ class MainActivity : Activity() {
         setContentView(ScrollView(this).apply { addView(root) })
 
         requestNotificationPermissionIfNeeded()
+        requestListenerRebind()
         WatchRelay.onStatusChange = { ui.post { render() } }
         WatchRelay.start(applicationContext)
         // Also started by NavListener; harmless twice, and this way the status
@@ -130,16 +131,35 @@ class MainActivity : Activity() {
         statusView.setTextColor(if (granted) Color.DKGRAY else Color.RED)
         statusView.text = buildString {
             appendLine("notification access : ${if (granted) "granted" else "NOT GRANTED"}")
-            appendLine("listener bound      : ${Status.listenerBound}")
+            appendLine("listener bound      : ${if (Status.listenerBound) "true" else "FALSE (street/ETA only)"}")
             appendLine("watch               : ${WatchRelay.status}")
             appendLine("last send result    : ${WatchRelay.lastSent}")
             appendLine("osmand              : ${OsmAndLink.status}")
             appendLine("osmand notifs seen  : ${Status.osmandNotifsSeen}")
             appendLine("navigation active   : ${Status.navActive}")
+            appendLine("turns received      : ${Status.turnsReceived}")
             appendLine("last turn           : ${Status.lastTurnType}")
             appendLine("messages relayed    : ${Status.sentCount}")
             appendLine("last payload        : ${Status.lastPayload}")
             appendLine("last error          : ${Status.lastError}")
+        }
+    }
+
+    /**
+     * Ask Android to bind the notification listener.
+     *
+     * Replacing the app leaves the service *enabled but unbound* — it keeps the
+     * grant and simply never starts, so the street and ETA quietly stop
+     * arriving and nothing says why. requestRebind is the documented cure and
+     * costs nothing when it is already bound.
+     */
+    private fun requestListenerRebind() {
+        try {
+            android.service.notification.NotificationListenerService.requestRebind(
+                android.content.ComponentName(this, NavListener::class.java)
+            )
+        } catch (e: Exception) {
+            android.util.Log.w(WatchRelay.TAG, "requestRebind failed", e)
         }
     }
 

@@ -58,13 +58,6 @@ object OsmAndLink {
      *  because nothing about "subscribe failed" suggests where to look. */
     const val NOT_ENABLED = "NOT ENABLED — in OsmAnd: Menu > Plugins > Maps Relay > enable"
 
-    /**
-     * Called on every turn change. **Runs on a Binder thread**, not the main
-     * thread -- anything it touches must be safe for that.
-     */
-    @Volatile
-    var onDirection: ((ADirectionInfo) -> Unit)? = null
-
     @Volatile
     var bound: Boolean = false
         private set
@@ -221,7 +214,11 @@ object OsmAndLink {
         override fun updateNavigationInfo(directionInfo: ADirectionInfo?) {
             val d = directionInfo ?: return
             try {
-                onDirection?.invoke(d)
+                // Straight into Relay, deliberately. This used to go through a
+                // nullable handler that NavListener assigned in onCreate -- and
+                // when a reinstall left that service enabled but unbound, every
+                // turn landed in a null and vanished without a trace.
+                Relay.onDirection(d)
             } catch (e: Exception) {
                 // A throw here crosses back over the binder and would take
                 // OsmAnd's caller with it.
