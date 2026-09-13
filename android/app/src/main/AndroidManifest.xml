@@ -10,7 +10,12 @@
          "connectedDevice" is the accurate type, since that is literally what
          this does. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- "connectedDevice" looked like the honest type, but Android 14 also
+         demands one of BLUETOOTH_*/CHANGE_NETWORK_STATE/NFC/USB alongside it,
+         and this app holds none of them: the Bluetooth link belongs to Garmin
+         Connect, not to us. "specialUse" states the case instead of claiming a
+         permission we have no business holding. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <queries>
@@ -40,8 +45,11 @@
             android:name=".NavListener"
             android:exported="true"
             android:label="Maps Relay"
-            android:foregroundServiceType="connectedDevice"
+            android:foregroundServiceType="specialUse"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Relays Google Maps navigation guidance to a paired Garmin watch for the duration of a route." />
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>

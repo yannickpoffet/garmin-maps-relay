@@ -164,14 +164,17 @@ class NavListener : NotificationListenerService() {
             .build()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+                startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             } else {
                 startForeground(NOTIF_ID, n)
             }
             foreground = true
         } catch (e: Exception) {
-            // Most likely the notification permission was denied on Android
-            // 13+. Relaying still works; it is just more killable.
+            // Non-fatal by design: relaying still works without a foreground
+            // notification, it is just more killable. Surfaced rather than
+            // swallowed, because this silently failed on every notification
+            // until logcat showed why.
+            Status.lastError = "foreground: ${e.message?.take(120)}"
             Log.w(WatchRelay.TAG, "could not go foreground", e)
         }
     }

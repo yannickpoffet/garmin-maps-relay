@@ -1,30 +1,42 @@
-## v0.9 — builds that can update in place
+## v0.10 — the foreground service can actually start
 
-Installing v0.8 over v0.7 failed:
+Verified against a live route on a Xiaomi phone over adb. Parsing is confirmed
+working:
 
 ```
-INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package signatures do not match
+last payload : {m=1, d=0 m, s=toward Neuweilerpl., e=10:32 AM, dm=0}
 ```
 
-Gradle's default debug key is generated fresh on every clean CI runner, so
-**every build had a different signature**. Updating meant uninstalling first —
-which also throws away the notification-access grant, the one permission that
-is awkward to restore.
+Instruction from `android.text`, distance from `android.title`, ETA from
+`android.subText` with the AM/PM kept, distance parsed to a number, and the
+maneuver read from the notification icon. `maps notifs seen: 7`,
+`messages relayed: 4`, `last error: -`.
 
-Builds are now signed with a stable key held in a repository secret, so from
-here on the APK upgrades in place and the grant survives. Builds without the
-secret (a local build, a fork) fall back to the default debug key and still
-work.
+What logcat exposed along the way:
 
-No functional changes to the relay itself; v0.8's parsing is unchanged.
+```
+SecurityException: Starting FGS with type connectedDevice ... requires
+  allOf=[FOREGROUND_SERVICE_CONNECTED_DEVICE]
+  anyOf=[BLUETOOTH_ADVERTISE, BLUETOOTH_CONNECT, BLUETOOTH_SCAN,
+         CHANGE_NETWORK_STATE, ...]
+```
+
+`connectedDevice` looked like the honest type, but Android 14 also demands one
+of those `anyOf` permissions, and this app holds none of them — the Bluetooth
+link belongs to Garmin Connect, not to us. Claiming `BLUETOOTH_CONNECT` to
+satisfy a type check would have been a permission grab for something the app
+never does.
+
+- **The service now declares `specialUse`** with a subtype property stating
+  what it is for, which needs no permission the app has no business holding.
+- **Foreground failures are surfaced** in `last error` instead of only logcat.
+  This failed on every notification and was invisible from the phone.
+
+The relay kept working throughout — `startForeground` failing only means the
+process is more killable, not that relaying stops.
 
 ### Install
 
-This is the last release that needs an uninstall first, because it is the one
-introducing the new key:
+Installs straight over v0.9; no uninstall needed.
 
-1. Uninstall Maps Relay if present.
-2. Download `maps-relay.apk` below and open it.
-3. Grant notification access, and allow notifications when asked.
-
-Later versions will install straight over the top.
+Garmin Connect Mobile must be installed and paired; it is the transport.
