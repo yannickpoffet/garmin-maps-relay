@@ -32,9 +32,18 @@ jobs:
 
       # Without a stable key every build gets a different signature and
       # Android refuses to upgrade in place.
+      # The `secrets` context is not available in a step-level `if`, so the
+      # "do we have a key?" test lives inside the step instead.
       - name: Restore signing key
-        if: ${{ secrets.ANDROID_KEYSTORE_B64 != '' }}
-        run: echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > "$RUNNER_TEMP/mapsrelay.jks"
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/mapsrelay.jks"
+            echo "signing key restored"
+          else
+            echo "no signing secret; falling back to the default debug key"
+          fi
 
       - name: Build debug APK
         working-directory: android
