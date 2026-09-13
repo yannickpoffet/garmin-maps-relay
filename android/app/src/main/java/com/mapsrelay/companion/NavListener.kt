@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.service.notification.StatusBarNotification
 import android.util.Log
 import me.trevi.navparser.lib.NavigationData
 import me.trevi.navparser.lib.NavigationNotification
@@ -29,7 +30,26 @@ class NavListener : NavigationListener() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
+        // GMapsParser's NavigationListener starts *disabled*: its
+        // isGoogleMapsNotification() short-circuits on a `protected var
+        // enabled` that defaults to false, so without this every notification
+        // is silently ignored and navigation never appears to start. Setting
+        // it also re-scans notifications that are already on screen, which
+        // matters when the app is opened mid-route.
+        enabled = true
         WatchRelay.start(applicationContext)
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Status.listenerBound = true
+        Log.i(WatchRelay.TAG, "notification listener bound")
+    }
+
+    override fun onListenerDisconnected() {
+        Status.listenerBound = false
+        Log.w(WatchRelay.TAG, "notification listener unbound")
+        super.onListenerDisconnected()
     }
 
     override fun onDestroy() {
@@ -82,6 +102,24 @@ class NavListener : NavigationListener() {
             Log.w(WatchRelay.TAG, "stopForeground failed", e)
         }
         foreground = false
+    }
+
+    /**
+     * Diagnostic only - the real work happens in the base class.
+     *
+     * GMapsParser accepts a notification only if it is ongoing, from the Maps
+     * package, and has `id == 1`. That id is an assumption about Maps'
+     * internals, so if guidance ever stops being picked up again, this tells
+     * you whether the notification was seen at all and what id it carried -
+     * the difference between "Maps changed its id" and "the listener is not
+     * bound", which are otherwise indistinguishable from the outside.
+     */
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        if (sbn != null && sbn.packageName.contains("apps.maps")) {
+            Status.mapsSeen++
+            Status.lastMapsId = "id=${sbn.id} ongoing=${sbn.isOngoing}"
+        }
+        super.onNotificationPosted(sbn)
     }
 
     override fun onNavigationNotificationAdded(navNotification: NavigationNotification) {
@@ -190,7 +228,17 @@ class NavListener : NavigationListener() {
 
 /** Shared counters so the UI can show what the service is doing. */
 object Status {
+    /** Whether Android has actually bound the notification listener. Granting
+     *  access in settings is not the same as being bound, and the difference
+     *  is invisible without showing it. */
+    @Volatile var listenerBound = false
     @Volatile var navActive = false
+
+    /** Maps notifications seen at all, and the shape of the last one. If
+     *  these move while `messages relayed` stays at zero, the notification is
+     *  arriving but being rejected. */
+    @Volatile var mapsSeen = 0
+    @Volatile var lastMapsId = "-"
     @Volatile var sentCount = 0
     @Volatile var lastPayload = "-"
 

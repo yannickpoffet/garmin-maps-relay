@@ -96,7 +96,7 @@ object WatchRelay {
         } catch (e: Exception) {
             Log.w(TAG, "registerForDeviceEvents failed", e)
         }
-        setStatus("watch: ${d.friendlyName}")
+        setStatus(d.friendlyName)
     }
 
     /**

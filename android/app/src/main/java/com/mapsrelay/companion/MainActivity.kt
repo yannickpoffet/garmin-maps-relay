@@ -120,8 +120,10 @@ class MainActivity : Activity() {
         statusView.setTextColor(if (granted) Color.DKGRAY else Color.RED)
         statusView.text = buildString {
             appendLine("notification access : ${if (granted) "granted" else "NOT GRANTED"}")
+            appendLine("listener bound      : ${Status.listenerBound}")
             appendLine("watch               : ${WatchRelay.status}")
             appendLine("last send result    : ${WatchRelay.lastSent}")
+            appendLine("maps notifs seen    : ${Status.mapsSeen}  ${Status.lastMapsId}")
             appendLine("navigation active   : ${Status.navActive}")
             appendLine("messages relayed    : ${Status.sentCount}")
             appendLine("maneuver from icon  : ${Status.iconFallbacks}")
