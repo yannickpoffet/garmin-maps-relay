@@ -80,6 +80,16 @@ class MainActivity : Activity() {
         }, lp())
 
         root.addView(Button(this).apply {
+            text = "Open Maps Relay on watch"
+            // Garmin drops messages aimed at an app that is not running, which
+            // is what FAILURE_DURING_TRANSFER means here.
+            setOnClickListener {
+                WatchRelay.openOnWatch(force = true)
+                render()
+            }
+        }, lp())
+
+        root.addView(Button(this).apply {
             text = "Reconnect watch and OsmAnd"
             setOnClickListener {
                 WatchRelay.start(applicationContext)

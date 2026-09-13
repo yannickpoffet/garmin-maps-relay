@@ -47,6 +47,11 @@ object WatchRelay {
      *  callback must not wedge the link shut for the rest of the route. */
     private const val SEND_TIMEOUT_MS = 4000L
 
+    /** Last attempt to launch the watch app, so a failing route does not
+     *  prompt on the wrist every second. */
+    @Volatile private var lastOpenAt = 0L
+    private const val OPEN_INTERVAL_MS = 60_000L
+
     @Volatile var status: String = "not started"
         private set
 
@@ -125,7 +130,9 @@ object WatchRelay {
 
         try {
             instance.registerForDeviceEvents(d) { dev, st ->
-                setStatus("${dev.friendlyName}: $st")
+                // friendlyName comes back empty sometimes, which rendered the
+                // status line as a bare ": CONNECTED".
+                setStatus("${nameOf(dev)}: $st")
                 // Forget a device that has gone away so the next send re-picks
                 // rather than firing into a dead handle.
                 if (st != IQDevice.IQDeviceStatus.CONNECTED) {
@@ -135,7 +142,41 @@ object WatchRelay {
         } catch (e: Exception) {
             Log.w(TAG, "registerForDeviceEvents failed", e)
         }
-        setStatus(d.friendlyName)
+        setStatus(nameOf(d))
+    }
+
+    private fun nameOf(d: IQDevice): String {
+        val n = d.friendlyName
+        return if (n.isNullOrBlank()) "watch" else n
+    }
+
+    /**
+     * Ask the watch to open Maps Relay.
+     *
+     * Garmin drops any message addressed to an app that is not running, which
+     * is what FAILURE_DURING_TRANSFER means in practice: the link is fine, the
+     * recipient simply is not there. Opening it remotely removes the one manual
+     * step this app could not otherwise avoid — remembering to start the watch
+     * app before setting off.
+     *
+     * Throttled, because on some devices this prompts on the wrist.
+     */
+    fun openOnWatch(force: Boolean = false) {
+        val instance = ciq ?: return
+        val d = device ?: return
+        val a = app ?: return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastOpenAt < OPEN_INTERVAL_MS) return
+        lastOpenAt = now
+        try {
+            instance.openApplication(d, a) { _, _, st ->
+                Log.i(TAG, "openApplication -> $st")
+                lastSent = "open: $st"
+                onStatusChange?.invoke()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "openApplication failed", e)
+        }
     }
 
     /**
@@ -184,6 +225,9 @@ object WatchRelay {
                 lastSent = "$sendStatus @ ${System.currentTimeMillis() / 1000}"
                 if (sendStatus != ConnectIQ.IQMessageStatus.SUCCESS) {
                     Status.lastError = "send: $sendStatus"
+                    // Overwhelmingly this means the watch app is not open.
+                    // Launch it rather than silently dropping the route.
+                    openOnWatch()
                 }
                 Log.i(TAG, "send -> $sendStatus  $payload")
                 onStatusChange?.invoke()
