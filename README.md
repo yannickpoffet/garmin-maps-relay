@@ -103,9 +103,16 @@ touching `android/` publishes a debug APK to the `apk` release; download
 1. Install **OsmAnd** and download the offline maps for your area.
 2. Install the APK from the `apk` release.
 3. Open Maps Relay, tap **Grant notification access**, enable it.
-4. Garmin Connect Mobile must be installed, signed in and paired — it is the
+4. **In OsmAnd: Menu → Plugins → Maps Relay → enable.** OsmAnd gates its API
+   per calling app: the first time we ask it registers us *disabled*, persists
+   that, and refuses, so this step is mandatory and there is no prompt for it.
+   Maps Relay only appears in that list after it has tried once — so open Maps
+   Relay first, which step 3 already does. The status screen goes from
+   `NOT ENABLED` to `connected, receiving turns` within a few seconds of the
+   toggle; no restart needed.
+5. Garmin Connect Mobile must be installed, signed in and paired — it is the
    transport, there is no alternative.
-5. Open **Maps Relay** on the watch, then start navigating in OsmAnd.
+6. Open **Maps Relay** on the watch, then start navigating in OsmAnd.
 
 Tap **Send test message to watch** to check the link before trusting it on a
 route.

@@ -51,7 +51,20 @@ the arrow stops being a guess.
 1. Install **OsmAnd** (`net.osmand`) and download your offline maps.
 2. Download `maps-relay.apk` below on the phone and open it.
 3. Grant notification access, and allow notifications when asked.
-4. **Reflash the watch app** — `OFF_ROUTE` changes the maneuver contract, so
+4. **In OsmAnd: Menu → Plugins → Maps Relay → enable.** Found the hard way on
+   the test phone: OsmAnd gates its API per calling app, registering each one
+   *disabled* on first contact and refusing until a human says otherwise —
+
+   ```
+   net.osmand: Request AIDL API V2 for registerForNavUpdates
+               from com.mapsrelay.companion enabled: false
+   ```
+
+   There is no prompt, and the app only appears in that list once it has tried
+   at least once. The status screen says `NOT ENABLED` with this path on it
+   until the toggle is flipped, then goes to `connected, receiving turns`
+   within a few seconds on its own.
+5. **Reflash the watch app** — `OFF_ROUTE` changes the maneuver contract, so
    v0.5's watch build no longer matches.
 
 Garmin Connect Mobile must be installed and paired; it is the transport.

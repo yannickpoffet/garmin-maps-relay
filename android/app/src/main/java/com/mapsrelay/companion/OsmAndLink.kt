@@ -48,7 +48,15 @@ object OsmAndLink {
     private var binding = false
     private var lastBindAttempt = 0L
 
+    /** Bound is not the same as subscribed: OsmAnd accepts the bind from any
+     *  app and only then decides whether to honour the subscription. */
+    @Volatile private var subscribed = false
+
     private const val REBIND_INTERVAL_MS = 5000L
+
+    /** Shown until the user approves us inside OsmAnd. Names the exact screen,
+     *  because nothing about "subscribe failed" suggests where to look. */
+    const val NOT_ENABLED = "NOT ENABLED — in OsmAnd: Menu > Plugins > Maps Relay > enable"
 
     /**
      * Called on every turn change. **Runs on a Binder thread**, not the main
@@ -95,13 +103,22 @@ object OsmAndLink {
      */
     fun bind(force: Boolean = false) {
         val c = ctx ?: return
-        if (iface != null || binding) return
+        if (binding) return
 
         // The throttle exists so the send path can call this on every
         // instruction; a button press is a deliberate act and skips it.
         val now = System.currentTimeMillis()
         if (!force && now - lastBindAttempt < REBIND_INTERVAL_MS) return
         lastBindAttempt = now
+
+        // Already connected but refused. The user has most likely just gone to
+        // enable us in OsmAnd, and the toggle sends no signal here -- so retry
+        // the subscription rather than making them restart the app.
+        val existing = iface
+        if (existing != null) {
+            if (!subscribed) subscribe(existing)
+            return
+        }
 
         val pkg = installedPackage(c)
         if (pkg == null) {
@@ -153,26 +170,44 @@ object OsmAndLink {
             val i = IOsmAndAidlInterface.Stub.asInterface(service)
             iface = i
             bound = true
-            try {
-                val params = ANavigationUpdateParams().apply {
-                    setSubscribeToUpdates(true)
-                    setCallbackId(0L)
-                }
-                val id = i.registerForNavigationUpdates(params, callback)
-                setStatus(if (id >= 0) "connected, subscribed" else "connected, subscribe failed")
-            } catch (e: Exception) {
-                Status.lastError = "subscribe: ${e.message}"
-                setStatus("connected, subscribe threw: ${e.message}")
-            }
+            subscribe(i)
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
+            subscribed = false
             // OsmAnd died or was force-stopped. Drop the handle so the next
             // bind() call re-establishes rather than firing into a dead binder.
             iface = null
             bound = false
             binding = false
             setStatus("disconnected")
+        }
+    }
+
+    /**
+     * Ask OsmAnd to push turn updates.
+     *
+     * OsmAnd gates its API per calling app: on first contact it registers us
+     * with enabled=false, persists that, and refuses. A negative return is
+     * therefore the expected result of a first run rather than a fault, and
+     * the only cure is a human enabling us in OsmAnd -- which sends no signal
+     * back here, hence the retry from [bind].
+     */
+    private fun subscribe(i: IOsmAndAidlInterface) {
+        try {
+            val params = ANavigationUpdateParams().apply {
+                setSubscribeToUpdates(true)
+                setCallbackId(0L)
+            }
+            val id = i.registerForNavigationUpdates(params, callback)
+            subscribed = id >= 0
+            // "subscribe failed" on its own sends you hunting through the
+            // wrong half of the system, so name the screen instead.
+            setStatus(if (subscribed) "connected, receiving turns" else NOT_ENABLED)
+        } catch (e: Exception) {
+            subscribed = false
+            Status.lastError = "subscribe: ${e.message}"
+            setStatus("connected, subscribe threw: ${e.message}")
         }
     }
 

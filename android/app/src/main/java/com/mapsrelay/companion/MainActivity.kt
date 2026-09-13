@@ -31,6 +31,11 @@ class MainActivity : Activity() {
 
     private val refresh = object : Runnable {
         override fun run() {
+            // Enabling us inside OsmAnd sends no signal back, and this screen
+            // is where you are standing when you do it — so retry from here
+            // and let it go green on its own. bind() throttles internally, so
+            // calling it once a second costs nothing.
+            OsmAndLink.bind()
             render()
             ui.postDelayed(this, 1000)
         }
