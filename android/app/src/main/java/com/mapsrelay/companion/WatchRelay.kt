@@ -35,6 +35,18 @@ object WatchRelay {
      *  onSdkReady throws "SDK not initialized". */
     @Volatile private var sdkReady = false
 
+    /** When the in-flight send started, or 0 when idle.
+     *
+     *  Connect IQ carries one message at a time over BLE, and starting another
+     *  before the last completes gets both FAILURE_DURING_TRANSFER. Nothing
+     *  used to stop that, which mattered little when updates were gated to a
+     *  handful per turn and matters a great deal now they track every metre. */
+    @Volatile private var inFlightSince = 0L
+
+    /** How long to wait before assuming a send callback is never coming. A lost
+     *  callback must not wedge the link shut for the rest of the route. */
+    private const val SEND_TIMEOUT_MS = 4000L
+
     @Volatile var status: String = "not started"
         private set
 
@@ -159,14 +171,26 @@ object WatchRelay {
         }
         val d = device ?: return false
         val a = app ?: return false
+
+        // One message on the wire at a time.
+        val started = System.currentTimeMillis()
+        val busy = inFlightSince
+        if (busy != 0L && started - busy < SEND_TIMEOUT_MS) return false
+        inFlightSince = started
+
         return try {
             instance.sendMessage(d, a, payload) { _, _, sendStatus ->
+                inFlightSince = 0L
                 lastSent = "$sendStatus @ ${System.currentTimeMillis() / 1000}"
+                if (sendStatus != ConnectIQ.IQMessageStatus.SUCCESS) {
+                    Status.lastError = "send: $sendStatus"
+                }
                 Log.i(TAG, "send -> $sendStatus  $payload")
                 onStatusChange?.invoke()
             }
             true
         } catch (e: Exception) {
+            inFlightSince = 0L
             Log.w(TAG, "sendMessage failed", e)
             setStatus("send failed: ${e.message}")
             false
