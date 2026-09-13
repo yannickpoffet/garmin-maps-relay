@@ -34,7 +34,7 @@ class NavApp extends Application.AppBase {
 
     function getInitialView() as [Views] or [Views, InputDelegates] {
         _view = new NavView(_state);
-        return [_view, new NavDelegate(_view, _state, _alerts)];
+        return [_view, new NavDelegate(_view)];
     }
 
     //! A message arrived from the phone.

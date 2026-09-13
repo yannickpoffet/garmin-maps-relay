@@ -290,9 +290,12 @@ def render(m, distance, street, eta, remaining="", stale=False):
 
 
 def sheet():
-    """The same sequence, in the same order, that UP/DOWN cycles on the watch
-    (see source/Demo.mc). Keeping them aligned is the point: compare this
-    image against the watch to check the real panel agrees."""
+    """Every state the watch can display, on one sheet.
+
+    This used to mirror a canned sequence the watch itself could cycle through
+    on UP/DOWN; that was removed, because on a live route a stray button press
+    swapped the real instruction for a fabricated one. So this is now the only
+    way to review the arrows without driving a route."""
     cases = [
         (RIGHT, "200 m", "Rue de Lausanne", "12:34", "8.8 km"),
         (LEFT, "80 m", "Avenue de la Gare", "12:36", "8.6 km"),

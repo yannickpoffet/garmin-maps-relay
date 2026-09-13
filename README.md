@@ -74,8 +74,15 @@ cd maps-relay && python3 tools/preview.py docs/arrows.png
 
 It is a model, not the app: it catches geometry and layout mistakes (heads
 detached from shafts, glyphs that read as the wrong symbol, text overflowing
-the round screen), not Monkey C behaviour. The sequence matches what UP/DOWN
-cycles through on the watch, so the two can be compared directly.
+the round screen), not Monkey C behaviour. Nor does it model the device fonts —
+it draws everything in DejaVu, which is why it showed "200 m" for a long time
+while the watch rendered "200": `FONT_NUMBER_MEDIUM` has no letters in it.
+
+This is now the only way to see the arrows without a route. The watch app used
+to cycle canned instructions on UP/DOWN, which was useful scaffolding before
+the relay worked and a hazard afterwards — a stray button press mid-route
+replaced the live instruction with a fabricated one that looked just as
+authoritative.
 
 ## Building
 
