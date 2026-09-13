@@ -77,6 +77,63 @@ object OsmAndLink {
         onStatusChange?.invoke()
     }
 
+    /**
+     * Everything OsmAnd knows about the trip, taken from `getAppInfo()`.
+     *
+     * All of it typed. The street name, the distance left and the ETA used to
+     * be scraped out of the notification's text; OsmAnd has been handing them
+     * over as an int, an int and an epoch timestamp the whole time.
+     */
+    data class Trip(
+        /** Street for the *next* turn, formatted by OsmAnd as name + ref. */
+        val street: String,
+        /** Metres still to travel to the destination. */
+        val leftDistance: Int,
+        /** Seconds still to travel. */
+        val leftTime: Int,
+        /** Arrival time, epoch seconds. */
+        val arrivalTime: Long,
+        /** Turn angle of the next maneuver, degrees. */
+        val nextAngle: Int,
+        /** The turn *after* the next one — nothing else on this watch can show
+         *  you that a second turn follows immediately. */
+        val afterManeuver: Int,
+        val afterDistance: Int,
+        val afterStreet: String,
+        val afterAngle: Int,
+    )
+
+    /**
+     * Read the trip state. Returns null when nothing is being navigated, or
+     * when the call fails — callers keep their previous values rather than
+     * blanking the display over one bad read.
+     */
+    fun trip(): Trip? {
+        val i = iface ?: return null
+        val info = try {
+            i.appInfo
+        } catch (e: Exception) {
+            Status.lastError = "getAppInfo: ${e.message}"
+            return null
+        } ?: return null
+
+        val t = info.turnInfo
+        // Note the prefix: OsmAnd writes "next_" with a trailing underscore but
+        // "after_next" without one, so its keys really are spelled
+        // "after_nextturn_distance". Not a typo here.
+        return Trip(
+            street = t?.getString("next_turn_name").orEmpty(),
+            leftDistance = info.leftDistance,
+            leftTime = info.leftTime,
+            arrivalTime = info.arrivalTime,
+            nextAngle = (t?.getFloat("next_turn_angle") ?: 0f).toInt(),
+            afterManeuver = Maneuver.fromTurnXml(t?.getString("after_nextturn_type")),
+            afterDistance = t?.getInt("after_nextturn_distance") ?: -1,
+            afterStreet = t?.getString("after_nextturn_name").orEmpty(),
+            afterAngle = (t?.getFloat("after_nextturn_angle") ?: 0f).toInt(),
+        )
+    }
+
     fun start(context: Context) {
         ctx = context.applicationContext
         bind()

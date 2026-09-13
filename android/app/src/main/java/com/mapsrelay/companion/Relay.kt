@@ -27,23 +27,16 @@ object Relay {
     private var lastDistanceText = ""
     private var lastSentAt = 0L
 
-    /** Cosmetic fields, written by [NavListener] from OsmAnd's notification and
-     *  read on a Binder thread when a turn arrives. */
-    @Volatile var street = ""
-    @Volatile var eta = ""
-    /** Distance still to travel to the destination, e.g. "8.8 km". */
-    @Volatile var remaining = ""
-    @Volatile var arrived = false
+    /** Last good trip read, kept so one failed getAppInfo() call blanks
+     *  nothing. */
+    private var lastTrip: OsmAndLink.Trip? = null
 
     /** Reset between routes so a new one is not deduped against the last. */
     fun reset() {
         lastManeuver = -1
         lastStreet = ""
         lastDistanceText = ""
-        street = ""
-        eta = ""
-        remaining = ""
-        arrived = false
+        lastTrip = null
     }
 
     /**
@@ -63,12 +56,22 @@ object Relay {
         Status.turnsReceived++
         Status.lastTurnType = "${info.turnType} -> $maneuver @ ${meters}m"
 
-        // Arrival has no TurnType; the notification is the only hint.
-        if (arrived && meters in 0..ARRIVAL_METERS) {
+        Status.navActive = true
+
+        // Everything else about the trip, typed, straight from OsmAnd. This is
+        // the call that made the notification parser redundant: street name,
+        // distance left and arrival time all used to be regexes over text
+        // written for a human to read.
+        val trip = OsmAndLink.trip() ?: lastTrip
+        if (trip != null) lastTrip = trip
+        val street = trip?.street.orEmpty()
+
+        // Arrival has no TurnType of its own. It used to be guessed by looking
+        // for "arrive"/"Ziel"/"destination" in the notification text; the
+        // distance still to travel says the same thing without a word list.
+        if (trip != null && trip.leftDistance in 0..ARRIVAL_METERS) {
             maneuver = Maneuver.ARRIVE
         }
-
-        Status.navActive = true
 
         // Off route has no distance to a turn: -1 suppresses the watch's
         // proximity thresholds, which would otherwise fire on a stale number.
@@ -90,14 +93,15 @@ object Relay {
         // Only record what was actually sent. Recording a throttled update as
         // sent would suppress every later identical one and freeze the display
         // for good — harmless with buckets, fatal per-metre.
-        if (!send(maneuver, dm, text)) return
+        if (!send(maneuver, dm, text, street, trip)) return
         lastManeuver = maneuver
         lastStreet = street
         lastDistanceText = text
     }
 
     /** @return true if the payload was handed to the transport. */
-    private fun send(m: Int, dm: Int, text: String): Boolean {
+    private fun send(m: Int, dm: Int, text: String, street: String,
+                     trip: OsmAndLink.Trip?): Boolean {
         // A ceiling, not the pacing mechanism — the display-change test above
         // does the real work. It was 1000 ms, which quietly halved the update
         // rate: OsmAnd emits roughly once a second, so jitter alone pushed
@@ -110,18 +114,37 @@ object Relay {
             "m" to m,
             "d" to text,
             "s" to street,
-            "e" to eta,
+            "e" to clockOf(trip?.arrivalTime ?: 0L),
             // Trip total, not the next turn. Deliberately absent from the
             // change test above: it ticks down constantly and would otherwise
             // drive a send on its own every time it moved.
-            "r" to remaining,
+            "r" to distanceText(trip?.leftDistance ?: -1),
             "dm" to dm,
+            // The turn after this one. Nothing else on the watch can warn that
+            // a second maneuver follows immediately.
+            "m2" to (trip?.afterManeuver ?: Maneuver.UNKNOWN),
+            "dm2" to (trip?.afterDistance ?: -1),
+            "s2" to trip?.afterStreet.orEmpty(),
+            "a1" to (trip?.nextAngle ?: 0),
+            "a2" to (trip?.afterAngle ?: 0),
         )
         val ok = WatchRelay.send(payload)
         Status.lastPayload = payload.toString()
         if (ok) Status.sentCount++
         if (!ok) Log.w(WatchRelay.TAG, "relay not ready, dropped: $payload")
         return ok
+    }
+
+    /** Epoch seconds to a local "14:05", or "" when there is no arrival time. */
+    private fun clockOf(epochSeconds: Long): String {
+        if (epochSeconds <= 0L) return ""
+        val c = java.util.Calendar.getInstance()
+        c.timeInMillis = epochSeconds * 1000L
+        return String.format(
+            "%02d:%02d",
+            c.get(java.util.Calendar.HOUR_OF_DAY),
+            c.get(java.util.Calendar.MINUTE),
+        )
     }
 
     /**
@@ -140,9 +163,7 @@ object Relay {
      *  link. The display-change test is what actually paces sends. */
     private const val MIN_SEND_INTERVAL_MS = 400L
 
-    /** Only treat an arrival-looking notification as arrival once the last turn
-     *  is close, so a destination name appearing mid-route does not end the
-     *  display early. */
+    /** Below this many metres left to the destination, the route is done. */
     private const val ARRIVAL_METERS = 30
 }
 

@@ -10,19 +10,18 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 
 /**
- * Supplies the street name and ETA, and keeps the process alive for the
- * duration of a route.
+ * Keeps the process alive for the duration of a route, and nothing else.
  *
- * It no longer relays anything. The turn itself arrives over AIDL and is
- * handled by [Relay], which is reachable whether or not this service is
- * running — because this service is not always running. Android leaves a
+ * It reads no content out of OsmAnd's notification any more — only whether one
+ * is present, which is how a route's start and end are noticed. Street name,
+ * distance left and arrival time all now come typed from `getAppInfo()`, so
+ * the last regex over text written for human eyes is gone.
+ *
+ * It relays nothing either: turns arrive over AIDL and are handled by [Relay],
+ * which is reachable whether or not this service is running. Android leaves a
  * NotificationListenerService *enabled but unbound* after the app is replaced,
- * and when the send path lived in here that meant a reinstall silently stopped
- * every turn reaching the watch while the status screen still read
- * "connected, receiving turns".
- *
- * So the split is now: AIDL for the things a route depends on, this for the two
- * cosmetic fields and the foreground notification.
+ * and while the send path lived in here a reinstall silently stopped every
+ * turn reaching the watch.
  */
 class NavListener : NotificationListenerService() {
 
@@ -62,32 +61,28 @@ class NavListener : NotificationListenerService() {
      *  driven by the AIDL callback, which is the only source that knows a turn
      *  actually changed. */
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        if (!OsmAndNotificationParser.isNavigation(sbn)) return
+        if (!isOsmAndNavigation(sbn)) return
         Status.osmandNotifsSeen++
         // OsmAnd is demonstrably alive and navigating. If the AIDL link is not
         // up -- installed late, updated, force-stopped -- retry it here.
         OsmAndLink.bind()
-        try {
-            val info = OsmAndNotificationParser.parse(sbn!!) ?: return
-            Relay.street = info.street
-            Relay.eta = info.eta
-            Relay.remaining = info.remaining
-            Relay.arrived = info.arrived
-            Status.navActive = true
-            startRelayForeground()
-        } catch (e: Exception) {
-            // Cosmetic fields only — never allowed to disturb the relay.
-            Status.lastError = "parse: ${e.message}"
-            Log.w(WatchRelay.TAG, "parse failed", e)
-        }
+        Status.navActive = true
+        startRelayForeground()
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        if (!OsmAndNotificationParser.isNavigation(sbn)) return
+        if (!isOsmAndNavigation(sbn)) return
         // Navigation ended. The watch falls back to its stale display on its own.
         stopRelayForeground()
         Relay.reset()
         Status.navActive = false
+    }
+
+    /** OsmAnd's ongoing navigation notification — used as a route-is-running
+     *  signal, never for its contents. Free, paid and nightly builds. */
+    private fun isOsmAndNavigation(sbn: StatusBarNotification?): Boolean {
+        val s = sbn ?: return false
+        return s.isOngoing && s.packageName in OSMAND_PACKAGES
     }
 
     // ------------------------------------------------------------ foreground
@@ -138,6 +133,9 @@ class NavListener : NotificationListenerService() {
     }
 
     companion object {
+        private val OSMAND_PACKAGES =
+            setOf("net.osmand", "net.osmand.plus", "net.osmand.dev")
+
         private const val CHANNEL_ID = "relay"
         private const val NOTIF_ID = 1
     }

@@ -1,4 +1,4 @@
-## v0.9 — OsmAnd instead of Google Maps
+## v0.11 — OsmAnd instead of Google Maps
 
 v0.7 and v0.8 were both spent fixing the same class of bug: Google Maps
 publishes no guidance API, so the only way to see a turn was to intercept the
@@ -32,6 +32,27 @@ handed over by an app that means to hand them over.
   `net.osmand:android-aidl-lib:master-snapshot` — an unpinned snapshot on a
   third-party host would have put the CI build at its mercy. See
   `android/app/src/main/aidl/README.md`.
+
+### Everything typed, and a second page
+
+`getAppInfo()` returns the whole trip state as data — street name, metres left,
+arrival time as an epoch timestamp, and the maneuver *after* the next one. All
+of that was previously scraped out of the notification with regexes, so the
+notification parser is gone entirely; the notification is now read only for
+whether one exists, which is how a route's start and end are noticed. Arrival
+comes from the distance left running out rather than looking for the word
+"arrive" in three languages.
+
+**UP/DOWN now switch pages.** They used to cycle fourteen fabricated turns
+through the real display, which was useful before the relay worked and a hazard
+afterwards — a stray press mid-route replaced the live instruction with a
+made-up one that looked just as authoritative.
+
+The new page 2 sketches the road ahead from the two upcoming turns and their
+angles. It is not a map: the fr745 has no `MapView` and OsmAnd exposes no route
+geometry. What it shows that page 1 cannot is whether a second turn follows
+immediately — "left in 80 m" reads identically whether the next turn is 60 m or
+2.5 km later.
 
 ### The trade
 

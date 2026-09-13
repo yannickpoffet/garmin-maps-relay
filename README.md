@@ -25,13 +25,19 @@ Shows OsmAnd turn-by-turn directions from the phone on the watch.
 
 ```
 OsmAnd (Android)
-  ├─ AIDL updateNavigationInfo ──▶ maneuver + metres   (typed; drives sends)
-  └─ ongoing notification ───────▶ street + ETA        (best effort; cached)
+  ├─ AIDL updateNavigationInfo ──▶ maneuver + metres to the turn
+  ├─ AIDL getAppInfo() ──────────▶ street, distance left, ETA,
+  │                                 and the turn *after* the next one
+  └─ ongoing notification ───────▶ route running? (presence only)
                   │
-                  └─ NavListener: throttle + dedupe
+                  └─ Relay: dedupe on the displayed value, one send at a time
                       └─ Connect IQ SDK ──▶ Garmin Connect ──BLE──▶ watch
                                                                      └─ NavView
 ```
+
+Every field is typed. Nothing is parsed out of text any more: the notification
+is read only for *whether* one exists, which is how the start and end of a
+route are noticed.
 
 This used to read Google Maps' navigation notification. Maps publishes no
 guidance API, so the only way in was to intercept a notification written for
@@ -71,6 +77,25 @@ cd maps-relay && python3 tools/preview.py docs/arrows.png
 ```
 
 ![turn arrows](maps-relay/docs/arrows.png)
+
+### Page 2: the road ahead
+
+UP/DOWN switch pages. The second is a sketch of the next two maneuvers, dead
+reckoned from their distances and turn angles:
+
+![road ahead](maps-relay/docs/ahead.png)
+
+It is not a map, and cannot be: the fr745 has no `WatchUi.MapView`, and OsmAnd
+exposes no route geometry — `getActiveGpx` returns GPX files, not the route
+being navigated. What it does expose is two upcoming turns with an angle each,
+which is enough to draw the shape of what is coming.
+
+The point is the first two panels above. They are the same instruction —
+"left in 80 m" — and page 1 renders them identically. Only here can you see
+that one is followed by another turn 60 m later and the other by 2.5 km of
+clear road. Leg lengths are square-root compressed and the whole path is scaled
+to fit, so it is schematic: right in order and direction, deliberately not to
+scale.
 
 It is a model, not the app: it catches geometry and layout mistakes (heads
 detached from shafts, glyphs that read as the wrong symbol, text overflowing

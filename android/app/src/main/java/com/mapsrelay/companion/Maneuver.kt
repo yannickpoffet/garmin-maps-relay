@@ -52,9 +52,9 @@ object Maneuver {
      * matching on localised prose and then, failing that, from the pixels of an
      * icon bitmap. Both of those are gone.
      *
-     * `MERGE` has no TurnType and is now unreachable; the code and its arrow
-     * stay so the watch can still be exercised through Demo. `ARRIVE` is not a
-     * TurnType either — it comes from the notification instead.
+     * `MERGE` has no TurnType and is unreachable; the code and its arrow stay
+     * because the offline preview still exercises them. `ARRIVE` is not a
+     * TurnType either — it is inferred from the distance running out.
      */
     fun fromTurnType(turnType: Int): Int = when (turnType) {
         T_C -> STRAIGHT
@@ -70,5 +70,31 @@ object Maneuver {
         T_OFFR -> OFF_ROUTE
         T_RNDB, T_RNLB -> ROUNDABOUT
         else -> UNKNOWN
+    }
+
+    /**
+     * The same mapping again, from the XML spelling `TurnType.toXmlString()`
+     * uses inside the turn-info bundle rather than the integer constant.
+     *
+     * Roundabouts are matched by prefix: OsmAnd appends the exit number there,
+     * so the value arrives as "RNDB3" rather than a bare "RNDB".
+     */
+    fun fromTurnXml(xml: String?): Int {
+        if (xml == null) return UNKNOWN
+        if (xml.startsWith("RNDB") || xml.startsWith("RNLB")) return ROUNDABOUT
+        return when (xml) {
+            "C" -> STRAIGHT
+            "TL" -> LEFT
+            "TSLL" -> SLIGHT_LEFT
+            "TSHL" -> SHARP_LEFT
+            "TR" -> RIGHT
+            "TSLR" -> SLIGHT_RIGHT
+            "TSHR" -> SHARP_RIGHT
+            "KL" -> FORK_LEFT
+            "KR" -> FORK_RIGHT
+            "TU", "TRU" -> UTURN
+            "OFFR" -> OFF_ROUTE
+            else -> UNKNOWN
+        }
     }
 }

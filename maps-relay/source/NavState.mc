@@ -19,6 +19,18 @@ class NavState {
     //! from `distance`, which is the distance to the next maneuver.
     public var remaining as String = "";
 
+    //! The maneuver *after* the next one, and how far away it is in metres.
+    //! Google Maps never offered this; OsmAnd reports it in the same breath as
+    //! the next turn, and knowing a second turn follows immediately is exactly
+    //! what a single arrow cannot tell you.
+    public var afterManeuver as Number = Maneuver.UNKNOWN;
+    public var afterMeters as Number = -1;
+    public var afterStreet as String = "";
+
+    //! Turn angles in degrees, used to sketch the road ahead on page 2.
+    public var angle as Number = 0;
+    public var afterAngle as Number = 0;
+
     //! Distance to the maneuver in metres, or -1 when unknown. Sent
     //! separately from the display string because the alert thresholds need a
     //! number, and re-parsing a localised "0.4 km" on the watch would be both
@@ -62,6 +74,11 @@ class NavState {
             distance = asString(d.get("d"));
             eta      = asString(d.get("e"));
             remaining = asString(d.get("r"));
+            afterManeuver = asNumber(d.get("m2"), Maneuver.UNKNOWN);
+            afterMeters   = asNumber(d.get("dm2"), -1);
+            afterStreet   = asString(d.get("s2"));
+            angle         = asNumber(d.get("a1"), 0);
+            afterAngle    = asNumber(d.get("a2"), 0);
             meters   = asNumber(d.get("dm"), -1);
             arrived  = (maneuver == Maneuver.ARRIVE);
             offRoute = (maneuver == Maneuver.OFF_ROUTE);
@@ -73,6 +90,11 @@ class NavState {
             distance = "";
             eta = "";
             remaining = "";
+            afterManeuver = Maneuver.UNKNOWN;
+            afterMeters = -1;
+            afterStreet = "";
+            angle = 0;
+            afterAngle = 0;
             meters = -1;
             arrived = false;
             offRoute = false;

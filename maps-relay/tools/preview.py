@@ -10,6 +10,7 @@ C `Number / Number` truncates - and draws the result at the fr745's real
 
     python3 tools/preview.py out.png
 """
+import math
 import sys
 from PIL import Image, ImageDraw, ImageFont
 
@@ -331,7 +332,127 @@ def sheet():
     return sheet_img
 
 
+def leg_length(meters):
+    """Mirror of AheadView.legLength - relative units, sqrt compressed."""
+    if meters <= 0:
+        return 0.0
+    m = min(meters, 3000)
+    return 0.28 + 0.72 * math.sqrt(m / 3000.0)
+
+
+def clamp_angle(a):
+    """Mirror of AheadView.clampAngle."""
+    while a > 180:
+        a -= 360
+    while a < -180:
+        a += 360
+    return max(-60, min(60, a))
+
+
+def render_ahead(m, dist, meters, m2, meters2, angle, stale=False):
+    """Mirror of AheadView.draw - page 2, the road-ahead sketch."""
+    img = Image.new("RGB", (W, H), (0, 0, 0))
+    d = ImageDraw.Draw(img)
+    fg = DKGRAY if stale else WHITE
+    accent = DKGRAY if stale else GREEN
+    dim = DKGRAY if stale else LTGRAY
+    cx = W // 2
+
+    d.text((cx, int(H * 0.04)), "road ahead", font=font("XTINY"), fill=dim, anchor="ma")
+
+    if meters < 0:
+        d.text((cx, H // 2), "no route", font=font("SMALL"), fill=dim, anchor="mm")
+        return circle_mask(img)
+
+    gap = (meters2 - meters) if meters2 > meters else -1
+    t = 6
+    u1 = leg_length(meters)
+    u2 = 0.0 if gap < 0 else leg_length(gap)
+
+    h1 = -90.0
+    h2 = h1 + clamp_angle(angle)
+    x1 = u1 * math.cos(math.radians(h1))
+    y1 = u1 * math.sin(math.radians(h1))
+    x2 = x1 + u2 * math.cos(math.radians(h2))
+    y2 = y1 + u2 * math.sin(math.radians(h2))
+
+    xs = [0.0, x1] + ([x2] if u2 > 0 else [])
+    ys = [0.0, y1] + ([y2] if u2 > 0 else [])
+    bw, bh = max(xs) - min(xs), max(ys) - min(ys)
+    k = min(1000.0 if bw < 1e-3 else W * 0.66 / bw,
+            1000.0 if bh < 1e-3 else H * 0.40 / bh)
+    ox = cx - (min(xs) + max(xs)) / 2 * k
+    oy = H * 0.38 - (min(ys) + max(ys)) / 2 * k
+
+    px0, py0 = ox, oy
+    px1, py1 = ox + x1 * k, oy + y1 * k
+    seg(d, px0, py0, px1, py1, t, accent)
+
+    if u2 > 0:
+        px2, py2 = ox + x2 * k, oy + y2 * k
+        seg(d, px1, py1, px2, py2, t, dim)
+        d.ellipse([px2 - 6, py2 - 6, px2 + 6, py2 + 6], fill=dim)
+
+    d.ellipse([px0 - 5, py0 - 5, px0 + 5, py0 + 5], fill=fg)
+    d.ellipse([px1 - 7, py1 - 7, px1 + 7, py1 + 7], fill=accent)
+
+    d.text((cx, int(H * 0.68)), f"{NAMES[m]} in {dist}", font=font("XTINY"),
+           fill=fg, anchor="ma")
+
+    if gap < 0 or m2 == UNKNOWN:
+        then = "then: clear"
+    else:
+        g = f"{gap} m" if gap < 1000 else f"{gap/1000:.1f} km"
+        then = f"then {NAMES[m2]} in {g}"
+    d.text((cx, int(H * 0.79)), then, font=font("XTINY"),
+           fill=fg if u2 > 0 else dim, anchor="ma")
+    return circle_mask(img)
+
+
+def circle_mask(img):
+    """The screen is round: clip anything outside it, as render() does."""
+    out = Image.new("RGB", (W, H), (0, 0, 0))
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).ellipse([0, 0, W - 1, H - 1], fill=255)
+    out.paste(img, (0, 0), mask)
+    ImageDraw.Draw(out).ellipse([0, 0, W - 1, H - 1], outline=(70, 70, 70))
+    return out
+
+
+def ahead_sheet():
+    """Page 2 across the cases it exists to distinguish.
+
+    The first three differ only in how far the *second* turn is, which is
+    precisely what a single arrow on page 1 cannot tell you.
+    """
+    cases = [
+        ("left now, right immediately", LEFT, "80 m", 80, RIGHT, 140, 90),
+        ("left now, right much later",  LEFT, "80 m", 80, RIGHT, 2600, 90),
+        ("right in 1.2 km, then left",  RIGHT, "1.2 km", 1200, LEFT, 1450, -80),
+        ("nothing after this one",      STRAIGHT, "600 m", 600, UNKNOWN, -1, 0),
+        ("no route",                    UNKNOWN, "", -1, UNKNOWN, -1, 0),
+    ]
+    cols, pad, label_h = 5, 14, 20
+    rows = (len(cases) + cols - 1) // cols
+    img = Image.new("RGB", (cols * (W + pad) + pad,
+                            rows * (H + pad + label_h) + pad), (18, 18, 18))
+    dd = ImageDraw.Draw(img)
+    lf = ImageFont.truetype(f"{FONT_DIR}/DejaVuSans.ttf", 12)
+    for i, (label, m, dist, meters, m2, meters2, ang) in enumerate(cases):
+        r, c = divmod(i, cols)
+        x = pad + c * (W + pad)
+        y = pad + r * (H + pad + label_h)
+        img.paste(render_ahead(m, dist, meters, m2, meters2, ang), (x, y))
+        dd.text((x + W // 2, y + H + 3), label, font=lf,
+                fill=(160, 160, 160), anchor="ma")
+    return img
+
+
 if __name__ == "__main__":
     out = sys.argv[1] if len(sys.argv) > 1 else "preview.png"
     sheet().save(out)
     print("wrote", out)
+    ahead = sys.argv[2] if len(sys.argv) > 2 else None
+    if ahead:
+        ahead_sheet().save(ahead)
+        print("wrote", ahead)

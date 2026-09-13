@@ -14,6 +14,10 @@ class NavView extends WatchUi.View {
 
     private var _state as NavState;
     private var _debug as Boolean = false;
+    private var _page as Number = 0;
+    private var _ahead as AheadView = new AheadView();
+
+    public static const PAGES = 2;
     private var _timer as Timer.Timer?;
     private var _w as Number = 240;
     private var _h as Number = 240;
@@ -51,6 +55,18 @@ class NavView extends WatchUi.View {
         WatchUi.requestUpdate();
     }
 
+    //! UP/DOWN move between pages. These buttons used to cycle fabricated
+    //! instructions; a real second page is a better use of them.
+    function nextPage() as Void {
+        _page = (_page + 1) % PAGES;
+        WatchUi.requestUpdate();
+    }
+
+    function prevPage() as Void {
+        _page = (_page + PAGES - 1) % PAGES;
+        WatchUi.requestUpdate();
+    }
+
     function onUpdate(dc as Graphics.Dc) as Void {
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
         dc.clear();
@@ -67,7 +83,13 @@ class NavView extends WatchUi.View {
             drawArrival(dc);
             return;
         }
+        if (_page == 1) {
+            _ahead.draw(dc, _state, _w, _h);
+            drawPageDots(dc);
+            return;
+        }
         drawNav(dc);
+        drawPageDots(dc);
     }
 
     //! Grey everything once the feed goes quiet. A stale turn shown in
@@ -167,6 +189,19 @@ class NavView extends WatchUi.View {
             var drop = dc.getFontHeight(nf) - dc.getFontHeight(uf);
             dc.drawText(x + nw + gap, y + drop, uf, unit,
                         Graphics.TEXT_JUSTIFY_LEFT);
+        }
+    }
+
+    //! Which page you are on, as dots down the right edge. Without them a
+    //! second page is invisible until you press a button by accident.
+    function drawPageDots(dc as Graphics.Dc) as Void {
+        var x = _w - 8;
+        var gap = 10;
+        var top = _h / 2 - ((PAGES - 1) * gap) / 2;
+        for (var i = 0; i < PAGES; i++) {
+            dc.setColor(i == _page ? Graphics.COLOR_LT_GRAY : Graphics.COLOR_DK_GRAY,
+                        Graphics.COLOR_TRANSPARENT);
+            dc.fillCircle(x, top + i * gap, (i == _page) ? 3 : 2);
         }
     }
 
