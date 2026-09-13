@@ -212,7 +212,38 @@ def wrap(d, text, f, max_w, max_lines):
     return out
 
 
-def render(m, distance, street, eta, stale=False):
+def draw_distance(d, cx, y, text, fg):
+    """Mirror of NavView.drawDistance: big number, small unit beside it.
+
+    FONT_NUMBER_MEDIUM on the real device is a digits-and-separators font with
+    no letters at all, so drawing "348 m" through it renders "348" and the unit
+    silently vanishes. This preview draws everything in DejaVu, which has every
+    glyph, so it cheerfully showed "200 m" for months while the watch showed
+    "200". Splitting the draw here keeps the geometry honest; UNIT_SAFE below
+    keeps the font limitation honest.
+    """
+    num, _, unit = text.partition(" ")
+    nf, uf = font("NUMBER_MEDIUM"), font("SMALL")
+    nw = d.textlength(num, font=nf)
+    gap = d.textlength(" ", font=uf) if unit else 0
+    uw = d.textlength(unit, font=uf) if unit else 0
+    x = cx - (nw + gap + uw) / 2
+    d.text((x, y), num, font=nf, fill=fg, anchor="la")
+    if unit:
+        drop = FONTS["NUMBER_MEDIUM"] - FONTS["SMALL"]
+        d.text((x + nw + gap, y + drop), unit, font=uf, fill=fg, anchor="la")
+
+
+def join_footer(left, right):
+    """Mirror of NavView.joinFooter."""
+    if not left:
+        return right
+    if not right:
+        return left
+    return f"{left} \u00b7 {right}"
+
+
+def render(m, distance, street, eta, remaining="", stale=False):
     """Mirror of NavView.drawNav."""
     img = Image.new("RGB", (W, H), (0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -236,8 +267,7 @@ def render(m, distance, street, eta, stale=False):
         draw_maneuver(d, m, cx, int(H * 0.30), arrow_size, accent)
 
     if distance:
-        f = font("NUMBER_MEDIUM")
-        d.text((cx, int(H * 0.46)), distance, font=f, fill=fg, anchor="ma")
+        draw_distance(d, cx, int(H * 0.46), distance, fg)
 
     if m != UNKNOWN:
         f = font("SMALL")
@@ -245,7 +275,7 @@ def render(m, distance, street, eta, stale=False):
                font=f, fill=fg, anchor="ma")
 
     f = font("XTINY")
-    footer = "no signal" if stale else eta
+    footer = "no signal" if stale else join_footer(remaining, eta)
     d.text((cx, int(H * 0.80)), footer, font=f,
            fill=ORANGE if stale else LTGRAY, anchor="ma")
 
@@ -264,20 +294,20 @@ def sheet():
     (see source/Demo.mc). Keeping them aligned is the point: compare this
     image against the watch to check the real panel agrees."""
     cases = [
-        (RIGHT, "200 m", "Rue de Lausanne", "12:34"),
-        (LEFT, "80 m", "Avenue de la Gare", "12:36"),
-        (SLIGHT_LEFT, "400 m", "Route de Berne", "12:41"),
-        (SLIGHT_RIGHT, "1.2 km", "Boulevard de Perolles very long name", "12:45"),
-        (SHARP_LEFT, "50 m", "Chemin des Fleurettes", "12:47"),
-        (SHARP_RIGHT, "30 m", "Rue du Pont", "12:48"),
-        (STRAIGHT, "2.4 km", "Autoroute A12", "12:55"),
-        (UTURN, "90 m", "Route Cantonale", "12:58"),
-        (ROUNDABOUT, "300 m", "Giratoire, 3e sortie", "13:02"),
-        (MERGE, "600 m", "A1 direction Bern", "13:09"),
-        (FORK_LEFT, "700 m", "Sortie 12", "13:12"),
-        (UNKNOWN, "150 m", "Unrecognised maneuver", "13:15"),
-        (OFF_ROUTE, "", "Off route", ""),
-        (ARRIVE, "", "Destination", "13:20"),
+        (RIGHT, "200 m", "Rue de Lausanne", "12:34", "8.8 km"),
+        (LEFT, "80 m", "Avenue de la Gare", "12:36", "8.6 km"),
+        (SLIGHT_LEFT, "400 m", "Route de Berne", "12:41", "7.9 km"),
+        (SLIGHT_RIGHT, "1.2 km", "Boulevard de Perolles very long name", "12:45", "6.4 km"),
+        (SHARP_LEFT, "50 m", "Chemin des Fleurettes", "12:47", "5.1 km"),
+        (SHARP_RIGHT, "30 m", "Rue du Pont", "12:48", "4.8 km"),
+        (STRAIGHT, "2.4 km", "Autoroute A12", "12:55", "3.2 km"),
+        (UTURN, "90 m", "Route Cantonale", "12:58", "2.6 km"),
+        (ROUNDABOUT, "300 m", "Giratoire, 3e sortie", "13:02", "1.9 km"),
+        (MERGE, "600 m", "A1 direction Bern", "13:09", "1.4 km"),
+        (FORK_LEFT, "700 m", "Sortie 12", "13:12", "980 m"),
+        (UNKNOWN, "150 m", "Unrecognised maneuver", "13:15", "700 m"),
+        (OFF_ROUTE, "", "Off route", "", ""),
+        (ARRIVE, "", "Destination", "13:20", "0 m"),
     ]
     cols, pad = 5, 14
     rows = (len(cases) + cols - 1) // cols
@@ -288,11 +318,11 @@ def sheet():
         (18, 18, 18))
     dd = ImageDraw.Draw(sheet_img)
     lf = ImageFont.truetype(f"{FONT_DIR}/DejaVuSans.ttf", 13)
-    for i, (m, dist, street, eta) in enumerate(cases):
+    for i, (m, dist, street, eta, rem) in enumerate(cases):
         r, c = divmod(i, cols)
         x = pad + c * (W + pad)
         y = pad + r * (H + pad + label_h)
-        sheet_img.paste(render(m, dist, street, eta), (x, y))
+        sheet_img.paste(render(m, dist, street, eta, rem), (x, y))
         dd.text((x + W // 2, y + H + 3), f"{i}  {NAMES[m]}", font=lf,
                 fill=(160, 160, 160), anchor="ma")
     return sheet_img

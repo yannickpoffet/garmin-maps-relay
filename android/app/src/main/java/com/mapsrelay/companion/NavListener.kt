@@ -71,6 +71,7 @@ class NavListener : NotificationListenerService() {
             val info = OsmAndNotificationParser.parse(sbn!!) ?: return
             Relay.street = info.street
             Relay.eta = info.eta
+            Relay.remaining = info.remaining
             Relay.arrived = info.arrived
             Status.navActive = true
             startRelayForeground()

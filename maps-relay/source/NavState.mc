@@ -15,6 +15,10 @@ class NavState {
     public var distance as String = "";
     public var eta as String = "";
 
+    //! Distance still to travel to the destination, e.g. "8.8 km". Distinct
+    //! from `distance`, which is the distance to the next maneuver.
+    public var remaining as String = "";
+
     //! Distance to the maneuver in metres, or -1 when unknown. Sent
     //! separately from the display string because the alert thresholds need a
     //! number, and re-parsing a localised "0.4 km" on the watch would be both
@@ -57,6 +61,7 @@ class NavState {
             street   = asString(d.get("s"));
             distance = asString(d.get("d"));
             eta      = asString(d.get("e"));
+            remaining = asString(d.get("r"));
             meters   = asNumber(d.get("dm"), -1);
             arrived  = (maneuver == Maneuver.ARRIVE);
             offRoute = (maneuver == Maneuver.OFF_ROUTE);
@@ -67,6 +72,7 @@ class NavState {
             street = raw;
             distance = "";
             eta = "";
+            remaining = "";
             meters = -1;
             arrived = false;
             offRoute = false;

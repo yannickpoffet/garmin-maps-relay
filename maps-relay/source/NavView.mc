@@ -104,9 +104,7 @@ class NavView extends WatchUi.View {
         // Distance to the maneuver is the number you actually act on, so it
         // gets the largest type on the screen.
         if (!_state.distance.equals("")) {
-            dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, (_h * 0.46).toNumber(), Graphics.FONT_NUMBER_MEDIUM,
-                        _state.distance, Graphics.TEXT_JUSTIFY_CENTER);
+            drawDistance(dc, cx, (_h * 0.46).toNumber(), _state.distance, fg);
         }
 
         // The instruction was already shown above when there is no arrow.
@@ -118,11 +116,58 @@ class NavView extends WatchUi.View {
                         Graphics.TEXT_JUSTIFY_CENTER);
         }
 
-        var footer = stale ? "no signal" : _state.eta;
+        // Trip summary: how far is left overall, and when you get there. Both
+        // are about the journey rather than the next turn, so they share the
+        // footer and the smallest type.
+        var footer = stale ? "no signal" : joinFooter(_state.remaining, _state.eta);
         dc.setColor(stale ? Graphics.COLOR_ORANGE : Graphics.COLOR_LT_GRAY,
                     Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, (_h * 0.80).toNumber(), Graphics.FONT_XTINY,
                     footer, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    //! "8.8 km" + "12:58" -> "8.8 km · 12:58", skipping either if absent so a
+    //! lone separator never appears.
+    function joinFooter(left as String, right as String) as String {
+        if (left.equals("")) { return right; }
+        if (right.equals("")) { return left; }
+        return left + " · " + right;
+    }
+
+    //! Draw "348 m" as a big number with a small unit beside it.
+    //!
+    //! FONT_NUMBER_MEDIUM is a digits-and-separators font: it has no letters at
+    //! all, so drawing "348 m" through it silently renders "348" and the unit
+    //! just disappears. That is why the watch showed no m/km while the offline
+    //! preview, which draws everything in DejaVu, looked perfectly fine.
+    //!
+    //! So the two halves are drawn in different fonts and their bottoms lined
+    //! up, which reads better than a single smaller font anyway.
+    function drawDistance(dc as Graphics.Dc, cx as Number, y as Number,
+                          text as String, fg as Graphics.ColorType) as Void {
+        var num = text;
+        var unit = "";
+        var sp = text.find(" ");
+        if (sp != null) {
+            num = text.substring(0, sp) as String;
+            unit = text.substring(sp + 1, text.length()) as String;
+        }
+
+        var nf = Graphics.FONT_NUMBER_MEDIUM;
+        var uf = Graphics.FONT_SMALL;
+        var nw = dc.getTextWidthInPixels(num, nf);
+        var gap = unit.equals("") ? 0 : dc.getTextWidthInPixels(" ", uf);
+        var uw = unit.equals("") ? 0 : dc.getTextWidthInPixels(unit, uf);
+
+        var x = cx - (nw + gap + uw) / 2;
+        dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(x, y, nf, num, Graphics.TEXT_JUSTIFY_LEFT);
+        if (!unit.equals("")) {
+            // Sit the unit on the number's baseline rather than its top.
+            var drop = dc.getFontHeight(nf) - dc.getFontHeight(uf);
+            dc.drawText(x + nw + gap, y + drop, uf, unit,
+                        Graphics.TEXT_JUSTIFY_LEFT);
+        }
     }
 
     //! Arrival gets its own screen rather than being one more turn: it is the

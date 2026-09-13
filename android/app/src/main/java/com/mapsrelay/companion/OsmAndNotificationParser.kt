@@ -48,6 +48,8 @@ object OsmAndNotificationParser {
     data class NavInfo(
         val street: String,
         val eta: String,
+        /** Distance still to travel to the destination, e.g. "8.8 km". */
+        val remaining: String,
         val arrived: Boolean,
     )
 
@@ -72,9 +74,14 @@ object OsmAndNotificationParser {
         // The summary is bullet-separated; an instruction line never is.
         val instructionLine = lines.firstOrNull { !it.contains(BULLET) }.orEmpty()
 
+        // The summary line is the bullet-separated one; the instruction line
+        // never contains a bullet.
+        val summary = lines.firstOrNull { it.contains(BULLET) }.orEmpty()
+
         return NavInfo(
             street = streetOf(title, instructionLine),
             eta = etaOf(lines + title),
+            remaining = remainingOf(summary),
             arrived = looksLikeArrival(title) || looksLikeArrival(instructionLine),
         )
     }
@@ -102,6 +109,19 @@ object OsmAndNotificationParser {
         // maneuvers that reads "0 m • ", which is worse than showing nothing.
         return s.ifEmpty { instruction }
     }
+
+    /**
+     * Distance left to the destination, from the summary line
+     * `"5.59 km • 23 min • 12:51 PM • 101 km/h"` — the first field.
+     *
+     * Anchored to the start rather than searched for, so the trailing
+     * `"101 km/h"` cannot be mistaken for a distance.
+     */
+    private fun remainingOf(summary: String): String =
+        LEADING_DISTANCE.find(summary)?.value?.trim().orEmpty()
+
+    private val LEADING_DISTANCE =
+        Regex("""^\s*[\d.,]+\s*(m|km|ft|mi|yd)\b""", RegexOption.IGNORE_CASE)
 
     /** A distance at the very end of the line: "60 m", "1.64 km", "500 ft". */
     private val TRAILING_DISTANCE =

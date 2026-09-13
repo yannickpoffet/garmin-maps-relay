@@ -31,6 +31,8 @@ object Relay {
      *  read on a Binder thread when a turn arrives. */
     @Volatile var street = ""
     @Volatile var eta = ""
+    /** Distance still to travel to the destination, e.g. "8.8 km". */
+    @Volatile var remaining = ""
     @Volatile var arrived = false
 
     /** Reset between routes so a new one is not deduped against the last. */
@@ -40,6 +42,7 @@ object Relay {
         lastDistanceText = ""
         street = ""
         eta = ""
+        remaining = ""
         arrived = false
     }
 
@@ -108,6 +111,10 @@ object Relay {
             "d" to text,
             "s" to street,
             "e" to eta,
+            // Trip total, not the next turn. Deliberately absent from the
+            // change test above: it ticks down constantly and would otherwise
+            // drive a send on its own every time it moved.
+            "r" to remaining,
             "dm" to dm,
         )
         val ok = WatchRelay.send(payload)
