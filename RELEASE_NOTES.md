@@ -1,36 +1,38 @@
-## v0.7 — parse the notification, not its layout
+## v0.8 — parsing the fields Maps actually uses
 
-v0.6 got as far as `listener bound: true` and `maps notifs seen: 1
-id=1 ongoing=true` — the Maps notification was arriving and being accepted —
-yet `navigation active` stayed false and nothing was relayed. The parse was
-failing, silently.
+Tested against a live route on the phone over adb, which finally made the real
+notification visible:
 
-**Why it was silent.** GMapsParser logs through Timber but only plants a tree
-in its own debug build, so from a released AAR every warning and swallowed
-exception goes nowhere at all.
+```
+android.title   = "0 m"                            <- distance only
+android.text    = "toward Im Holeeletten"          <- instruction
+android.subText = "8 min · 2.8 km · 10:04 AM ETA"  <- duration · remaining · ETA
+```
 
-**Why it was failing.** GMapsParser inflates the notification's `RemoteViews`
-and walks the view hierarchy. That worked when apps shipped custom
-notification layouts, but Maps now uses the standard template, so
-`contentView` is null and inflation throws.
+v0.7 assumed the title held `"750 m · instruction"`. It does not — that is the
+*system* rendering title and text together, and no single extra holds it. So
+v0.7 relayed the distance string as if it were the instruction.
 
-- **New extras-based parser.** `EXTRA_TITLE` / `EXTRA_TEXT` / `EXTRA_SUB_TEXT`
-  are documented, stable API. Maps puts distance and instruction in the title
-  separated by a middot ("750 m · At the roundabout, take the 2nd exit"), and
-  states with no distance ("towards Im Heimgarten") are handled too. Distances
-  parse in m/km/ft/mi/yd and in both `1.2` and `1,2` decimal forms.
-- **The maneuver arrow comes from the notification's large icon**, fed to the
-  existing icon classifier — the small icon is just the Maps logo.
-- This runs as the **primary** path. GMapsParser is still in place and its
-  richer data is used if it ever does succeed; the existing dedupe stops the
-  two paths from double-sending.
-- **A Timber tree is now planted**, so GMapsParser's internal warnings reach
-  logcat and the new `last error` line on the status screen.
+- **Fields read correctly**: distance from the title, instruction from the
+  text, ETA from the subtext. The route-start case, where the title carries the
+  instruction and there is no distance at all ("Head towards Im Heimgarten"),
+  still works, so neither field is trusted positionally.
+- **ETA keeps its AM/PM**, which a 12-hour phone needs to be unambiguous.
+
+**GMapsParser is gone.** It failed on every notification of the test route with
+`Impossible to parse navigation time Arrive 10:36`, because it inflates the
+notification's RemoteViews and Maps now uses the standard template. Its errors
+were also crowding out ours in `last error`. Dropping it removes a dependency,
+about 4 MB, and the JitPack repository.
+
+Confirmed working on the test route: `navigation active: true`, a relayed
+payload of `{m=1, d=, s=Head towards Im Heimgarten, e=10:36, dm=-1}`, and the
+icon classifier correctly reading the up-arrow as STRAIGHT.
 
 ### Install
 
 1. Download `maps-relay.apk` below on the phone and open it.
 2. Grant notification access, and allow notifications when asked.
-3. The watch app is unchanged since v0.5 — no need to reflash it.
+3. The watch app is unchanged since v0.5.
 
 Garmin Connect Mobile must be installed and paired; it is the transport.

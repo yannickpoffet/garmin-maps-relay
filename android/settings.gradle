@@ -6,8 +6,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // GMapsParser is published only via JitPack.
-        maven { url 'https://jitpack.io' }
     }
 }
 rootProject.name = "MapsRelay"

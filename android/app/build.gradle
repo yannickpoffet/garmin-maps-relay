@@ -32,12 +32,8 @@ dependencies {
     // Transport to the watch. Requires Garmin Connect Mobile installed.
     implementation "com.garmin.connectiq:ciq-companion-app-sdk:2.2.0@aar"
 
-    // Parses Google Maps' navigation notification. Deliberately not written
-    // by hand: the notification format is undocumented and Google changes it,
-    // so this is the one part worth delegating to something maintained.
-    implementation "com.github.3v1n0.GMapsParser:navparser:0.2.1"
-
-    // Same version navparser uses. Needed on the compile path so its own
-    // swallowed warnings can be routed somewhere visible.
-    implementation "com.jakewharton.timber:timber:4.7.1"
+    // No notification-parsing library: GMapsParser inflates the notification's
+    // RemoteViews, which fails on every notification on Android 14 because
+    // Maps uses the standard template. MapsNotificationParser reads the
+    // documented extras instead. See docs in that file.
 }

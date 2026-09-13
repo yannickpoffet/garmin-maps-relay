@@ -39,6 +39,21 @@ object MapsNotificationParser {
         return s.isOngoing && s.packageName.contains("apps.maps")
     }
 
+    /**
+     * Field layout, read off a live route on Android 14:
+     *
+     *     android.title   = "0 m"                            <- distance only
+     *     android.text    = "toward Im Holeeletten"          <- instruction
+     *     android.subText = "8 min . 2.8 km . 10:04 AM ETA"  <- duration/remaining/ETA
+     *
+     * The notification *renders* as "0 m - toward Im Holeeletten", which is
+     * the system combining title and text; that combined string is not stored
+     * in any single extra. Assuming it was cost a release.
+     *
+     * At the start of a route, before a maneuver exists, the title carries the
+     * instruction instead ("Head towards Im Heimgarten") and there is no
+     * distance at all, so neither field can be relied on positionally.
+     */
     fun parse(context: Context, sbn: StatusBarNotification): NavInfo? {
         val n = sbn.notification ?: return null
         val ex = n.extras ?: return null
@@ -49,29 +64,33 @@ object MapsNotificationParser {
 
         if (title.isEmpty() && text.isEmpty()) return null
 
-        // Maps puts both the distance and the instruction in the title,
-        // separated by a middot: "750 m · At the roundabout, take the 2nd exit".
-        // Fall back to treating the whole title as the instruction, because
-        // some states ("towards Im Heimgarten") carry no distance at all.
         var distanceText = ""
-        var instruction = title
-        val dot = title.indexOf('·')
-        if (dot > 0) {
-            val head = title.substring(0, dot).trim()
-            if (looksLikeDistance(head)) {
-                distanceText = head
+        var instruction: String
+
+        val dot = title.indexOf('\u00b7')
+        when {
+            // Usual case mid-route: title is purely the distance.
+            looksLikeDistance(title) -> {
+                distanceText = title
+                instruction = text.ifEmpty { title }
+            }
+            // Older/combined form, kept because it costs nothing to support.
+            dot > 0 && looksLikeDistance(title.substring(0, dot).trim()) -> {
+                distanceText = title.substring(0, dot).trim()
                 instruction = title.substring(dot + 1).trim()
             }
+            // Route start: the title is the instruction and there is no distance.
+            else -> instruction = title.ifEmpty { text }
         }
 
-        // The ETA lives in whichever of text/subtext looks like a clock time.
-        val eta = firstTimeLike(sub, text)
+        if (instruction.isEmpty()) instruction = text
+        if (instruction.isEmpty()) return null
 
         return NavInfo(
-            instruction = if (instruction.isEmpty()) text else instruction,
+            instruction = instruction,
             distanceText = distanceText,
             meters = metersOf(distanceText),
-            eta = eta,
+            eta = etaOf(sub, text),
             icon = largeIcon(context, n),
         )
     }
@@ -95,14 +114,18 @@ object MapsNotificationParser {
         }
     }
 
-    /** First candidate containing something clock-shaped, e.g. "Arrive 10:23". */
-    private fun firstTimeLike(vararg candidates: String): String {
-        val re = Regex("""\d{1,2}[:h]\d{2}""")
+    /**
+     * Arrival time out of e.g. "8 min . 2.8 km . 10:04 AM ETA" or "Arrive 10:23".
+     * Keeps the AM/PM suffix where there is one, since dropping it would make
+     * a 12-hour phone ambiguous on the watch.
+     */
+    private fun etaOf(vararg candidates: String): String {
+        val re = Regex("""\d{1,2}[:h]\d{2}(\s?[AaPp]\.?[Mm]\.?)?""")
         for (c in candidates) {
             val hit = re.find(c) ?: continue
-            return hit.value
+            return hit.value.trim()
         }
-        return candidates.firstOrNull { it.isNotEmpty() }.orEmpty()
+        return ""
     }
 
     /**
