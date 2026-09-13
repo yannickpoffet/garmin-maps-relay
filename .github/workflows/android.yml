@@ -83,7 +83,12 @@ jobs:
           NOTES="Debug build from ${GITHUB_SHA:0:7}. Download maps-relay.apk on your phone and open it."
           if gh release view apk >/dev/null 2>&1; then
             gh release upload apk maps-relay.apk --clobber
-            gh release edit apk --notes "$NOTES"
+            # Cosmetic, and GitHub's releases API has been returning
+            # intermittent 500/502s on it while the upload above succeeds.
+            # Failing the build over the description would throw away a good
+            # APK, so this one is allowed to fail.
+            gh release edit apk --notes "$NOTES" \
+              || echo "::warning::could not update release notes (APK uploaded fine)"
           else
             gh release create apk maps-relay.apk \
               --title "Maps Relay APK (latest)" \
