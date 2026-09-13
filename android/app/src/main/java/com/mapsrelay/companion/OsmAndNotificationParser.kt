@@ -64,13 +64,18 @@ object OsmAndNotificationParser {
         if (title.isEmpty() && bigText.isEmpty()) return null
 
         val lines = bigText.lines().map { it.trim() }.filter { it.isNotEmpty() }
-        val first = lines.firstOrNull().orEmpty()
-        val rest = lines.drop(1)
+
+        // Which line is which is decided by content, not position. When there
+        // is no upcoming maneuver OsmAnd drops the instruction line entirely
+        // and bigText is just the summary, so taking line 1 on faith puts
+        // "2.90 km - 12 min - 12:41 PM - 48 km/h" in the street field.
+        // The summary is bullet-separated; an instruction line never is.
+        val instructionLine = lines.firstOrNull { !it.contains(BULLET) }.orEmpty()
 
         return NavInfo(
-            street = streetOf(title, first),
-            eta = etaOf(rest + first + title),
-            arrived = looksLikeArrival(title) || looksLikeArrival(first),
+            street = streetOf(title, instructionLine),
+            eta = etaOf(lines + title),
+            arrived = looksLikeArrival(title) || looksLikeArrival(instructionLine),
         )
     }
 
@@ -82,19 +87,20 @@ object OsmAndNotificationParser {
      * go" on a 240px screen would only crowd out the one thing the watch
      * cannot show any other way.
      */
-    private fun streetOf(title: String, firstLine: String): String {
-        // "371 m • Turn left and go" -> "Turn left and go"
-        val instruction = title.substringAfter(BULLET, "").trim()
+    private fun streetOf(title: String, instructionLine: String): String {
+        // "371 m • Turn left and go" -> "Turn left and go", and a title with no
+        // bullet at all (route start) is itself the instruction.
+        val instruction = title.substringAfter(BULLET, title).trim()
 
-        var s = firstLine
+        var s = instructionLine
         if (instruction.isNotEmpty() && s.startsWith(instruction)) {
             s = s.removePrefix(instruction).trim()
         }
         s = TRAILING_DISTANCE.replace(s, "").trim()
 
-        // Nothing usable in bigText: fall back to whatever the title says, so a
-        // layout change costs clarity rather than the whole line.
-        return s.ifEmpty { instruction.ifEmpty { title } }
+        // Fall back to the instruction, but never to the raw title: between
+        // maneuvers that reads "0 m • ", which is worse than showing nothing.
+        return s.ifEmpty { instruction }
     }
 
     /** A distance at the very end of the line: "60 m", "1.64 km", "500 ft". */
