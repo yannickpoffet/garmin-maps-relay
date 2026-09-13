@@ -69,6 +69,31 @@ jobs:
             --notes-file RELEASE_NOTES.md \
             || gh release upload "$TAG" maps-relay.apk --clobber
 
+      # Publishing used to require pushing a `v*` tag by hand, and a forgotten
+      # tag left finished work sitting in the rolling `apk` release with no
+      # version against it -- twice. The version in build.gradle is the single
+      # source of truth now: bump it and the release publishes itself.
+      - name: Publish release for versionName
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER=$(sed -n 's/.*versionName *"\([^"]*\)".*/\1/p' android/app/build.gradle | head -1)
+          if [ -z "$VER" ]; then
+            echo "::warning::could not read versionName; skipping"
+            exit 0
+          fi
+          TAG="v$VER"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already released; leaving it alone"
+            exit 0
+          fi
+          echo "publishing $TAG"
+          gh release create "$TAG" maps-relay.apk \
+            --target "$GITHUB_SHA" \
+            --title "Maps Relay $TAG" \
+            --notes-file RELEASE_NOTES.md
+
       # Update in place rather than delete-and-recreate. Deleting the release
       # leaves the tag behind for a moment, and `gh release create` then fails
       # with "a release with the same tag name already exists" -- which is

@@ -1,3 +1,35 @@
+## v0.12 — open the watch app instead of failing into it
+
+Every payload was correct and not one of them landed:
+
+```
+turns received  : 119
+messages relayed: 64
+last payload    : {m=2, d=279 m, s=Schleetalstrasse, e=16:32,
+                   r=22.3 km, dm=279, m2=5, dm2=128, a1=-59, a2=25}
+last error      : send: FAILURE_DURING_TRANSFER
+```
+
+`FAILURE_DURING_TRANSFER` does not mean the link is broken. Garmin drops any
+message addressed to a Connect IQ app that is not currently running, and the
+watch app has to be open for a relay to reach it. The SDK can solve that
+itself: `ConnectIQ.openApplication` launches it.
+
+- **A failed send now opens Maps Relay on the watch**, throttled to once a
+  minute because it can prompt on the wrist, with a button for doing it
+  deliberately. This removes the last manual step: remembering to start the
+  watch app before setting off.
+- Confirmed working on a live route immediately afterwards — a smooth
+  784 → 652 → 576 → 262 → 200 → 139 → 94 → 49 m countdown, every field typed.
+- `friendlyName` comes back empty sometimes, which rendered the watch status
+  line as a bare `": CONNECTED"`.
+
+**Releases are now automatic.** Publishing used to need a `v*` tag pushed by
+hand, and twice the tag was forgotten, so finished work sat in the rolling
+`apk` release with no version against it. CI now reads `versionName` from
+`build.gradle` and publishes that release if it does not already exist —
+bumping the version is the whole of it.
+
 ## v0.11 — OsmAnd instead of Google Maps
 
 v0.7 and v0.8 were both spent fixing the same class of bug: Google Maps
