@@ -21,10 +21,19 @@ object WatchRelay {
      *  when nothing arrives. */
     private const val WATCH_APP_ID = "7b7ae6eb8f3e41cbaa48b12cdfe77ee2"
 
+    /** Kept so the SDK can be re-initialised from the send path, which has no
+     *  Context of its own. */
+    private var appContext: Context? = null
+
     private var ciq: ConnectIQ? = null
     private var device: IQDevice? = null
     private var app: IQApp? = null
     private var lastRepickAt = 0L
+
+    /** Having a ConnectIQ instance is not the same as having an initialised
+     *  one: initialize() is asynchronous, and every call on the SDK before
+     *  onSdkReady throws "SDK not initialized". */
+    @Volatile private var sdkReady = false
 
     @Volatile var status: String = "not started"
         private set
@@ -44,6 +53,11 @@ object WatchRelay {
     }
 
     fun start(context: Context) {
+        appContext = context.applicationContext
+        // This guard is only correct because onSdkShutDown nulls `ciq`. It used
+        // to leave the dead instance in place, so every later start() returned
+        // here and the watch link could not come back without restarting the
+        // process.
         if (ciq != null) return
         val instance = ConnectIQ.getInstance(context, ConnectIQ.IQConnectType.WIRELESS)
         ciq = instance
@@ -51,23 +65,36 @@ object WatchRelay {
 
         instance.initialize(context, true, object : ConnectIQ.ConnectIQListener {
             override fun onSdkReady() {
+                sdkReady = true
                 setStatus("SDK ready, looking for a watch")
                 pickDevice(instance)
             }
 
             override fun onInitializeError(status: ConnectIQ.IQSdkErrorStatus?) {
+                sdkReady = false
                 // Overwhelmingly the cause is Garmin Connect Mobile missing or
                 // not signed in; it is the transport, there is no fallback.
                 setStatus("init failed: $status — is Garmin Connect installed?")
             }
 
             override fun onSdkShutDown() {
+                // Drop everything, so the next start() genuinely re-initialises
+                // rather than handing back a shut-down instance.
+                sdkReady = false
+                ciq = null
+                device = null
+                app = null
                 setStatus("SDK shut down")
             }
         })
     }
 
     private fun pickDevice(instance: ConnectIQ) {
+        // Calling knownDevices before onSdkReady throws, and the catch below
+        // would then overwrite a perfectly good status line with "SDK not
+        // initialized" -- which is exactly what the status screen showed once
+        // OsmAnd started pushing turns faster than the SDK could start up.
+        if (!sdkReady) return
         val known = try {
             instance.knownDevices ?: emptyList()
         } catch (e: Exception) {
@@ -106,6 +133,18 @@ object WatchRelay {
      * Garmin drops the message. That is a platform constraint, not a bug here.
      */
     fun send(payload: Map<String, Any>): Boolean {
+        // Garmin Connect can shut the SDK down under us mid-route. Without
+        // this every later send returns false forever and the watch just stops
+        // updating, with nothing on screen to say why.
+        if (ciq == null) {
+            val c = appContext ?: return false
+            val now = System.currentTimeMillis()
+            if (now - lastRepickAt > REPICK_INTERVAL_MS) {
+                lastRepickAt = now
+                start(c)
+            }
+            return false
+        }
         val instance = ciq ?: return false
         // The watch can drop off and come back mid-route (out of range, phone
         // Bluetooth blip). Re-picking lazily here means recovery happens on
