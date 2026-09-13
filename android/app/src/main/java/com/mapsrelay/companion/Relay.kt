@@ -24,7 +24,7 @@ object Relay {
 
     private var lastManeuver = -1
     private var lastStreet = ""
-    private var lastBucket = -1
+    private var lastDistanceText = ""
     private var lastSentAt = 0L
 
     /** Cosmetic fields, written by [NavListener] from OsmAnd's notification and
@@ -37,7 +37,7 @@ object Relay {
     fun reset() {
         lastManeuver = -1
         lastStreet = ""
-        lastBucket = -1
+        lastDistanceText = ""
         street = ""
         eta = ""
         arrived = false
@@ -67,32 +67,45 @@ object Relay {
 
         Status.navActive = true
 
-        val bucket = bucketOf(meters)
-        if (maneuver == lastManeuver && street == lastStreet && bucket == lastBucket) {
-            return
-        }
-        send(maneuver, meters)
-        lastManeuver = maneuver
-        lastStreet = street
-        lastBucket = bucket
-    }
-
-    private fun send(m: Int, meters: Int) {
-        // OsmAnd updates as the distance ticks down, several times a second on
-        // a fast road. Relaying each one would flood the BLE link and drain
-        // both batteries, so hold a hard floor of one per second on top of the
-        // change detection above.
-        val now = System.currentTimeMillis()
-        if (now - lastSentAt < MIN_SEND_INTERVAL_MS) return
-        lastSentAt = now
-
         // Off route has no distance to a turn: -1 suppresses the watch's
         // proximity thresholds, which would otherwise fire on a stale number.
-        val dm = if (m == Maneuver.OFF_ROUTE) -1 else meters
+        val dm = if (maneuver == Maneuver.OFF_ROUTE) -1 else meters
+        val text = distanceText(dm)
+
+        // Send whenever what the watch *displays* would change — not on coarse
+        // distance buckets, which is what this used to do. Those edges were
+        // 20/50/100/200/500/1000/2000/5000 m, so the whole stretch from 500 m
+        // down to 201 m sent nothing at all and the number on the wrist sat
+        // frozen while OsmAnd's own screen counted down.
+        //
+        // Keying on the rendered string is self-limiting: under 1 km it changes
+        // every metre, so the cadence is set by the time floor below; above it
+        // the display reads "2.4 km" and only moves every 100 m travelled.
+        if (maneuver == lastManeuver && street == lastStreet && text == lastDistanceText) {
+            return
+        }
+        // Only record what was actually sent. Recording a throttled update as
+        // sent would suppress every later identical one and freeze the display
+        // for good — harmless with buckets, fatal per-metre.
+        if (!send(maneuver, dm, text)) return
+        lastManeuver = maneuver
+        lastStreet = street
+        lastDistanceText = text
+    }
+
+    /** @return true if the payload was handed to the transport. */
+    private fun send(m: Int, dm: Int, text: String): Boolean {
+        // A ceiling, not the pacing mechanism — the display-change test above
+        // does the real work. It was 1000 ms, which quietly halved the update
+        // rate: OsmAnd emits roughly once a second, so jitter alone pushed
+        // every other update under the floor and it was dropped.
+        val now = System.currentTimeMillis()
+        if (now - lastSentAt < MIN_SEND_INTERVAL_MS) return false
+        lastSentAt = now
 
         val payload = mapOf(
             "m" to m,
-            "d" to distanceText(dm),
+            "d" to text,
             "s" to street,
             "e" to eta,
             "dm" to dm,
@@ -101,6 +114,7 @@ object Relay {
         Status.lastPayload = payload.toString()
         if (ok) Status.sentCount++
         if (!ok) Log.w(WatchRelay.TAG, "relay not ready, dropped: $payload")
+        return ok
     }
 
     /**
@@ -114,19 +128,10 @@ object Relay {
         else -> String.format("%.1f km", meters / 1000.0)
     }
 
-    /**
-     * Distance buckets. Updates go out only when the turn crosses one of these,
-     * which is where the number on the watch changes meaning.
-     */
-    private fun bucketOf(meters: Int): Int {
-        if (meters < 0) return -1
-        val edges = intArrayOf(20, 50, 100, 200, 500, 1000, 2000, 5000)
-        var i = 0
-        while (i < edges.size && meters > edges[i]) i++
-        return i
-    }
-
-    private const val MIN_SEND_INTERVAL_MS = 1000L
+    /** Ceiling on send rate. Low enough not to interfere with OsmAnd's roughly
+     *  1 Hz updates, high enough that a chatty source cannot flood the BLE
+     *  link. The display-change test is what actually paces sends. */
+    private const val MIN_SEND_INTERVAL_MS = 400L
 
     /** Only treat an arrival-looking notification as arrival once the last turn
      *  is close, so a destination name appearing mid-route does not end the
