@@ -17,3 +17,7 @@ android/build/
 android/app/build/
 android/local.properties
 *.apk
+
+# Signing material must never reach the public repo
+*.jks
+keystore.b64

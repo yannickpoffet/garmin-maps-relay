@@ -1,38 +1,30 @@
-## v0.8 — parsing the fields Maps actually uses
+## v0.9 — builds that can update in place
 
-Tested against a live route on the phone over adb, which finally made the real
-notification visible:
+Installing v0.8 over v0.7 failed:
 
 ```
-android.title   = "0 m"                            <- distance only
-android.text    = "toward Im Holeeletten"          <- instruction
-android.subText = "8 min · 2.8 km · 10:04 AM ETA"  <- duration · remaining · ETA
+INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package signatures do not match
 ```
 
-v0.7 assumed the title held `"750 m · instruction"`. It does not — that is the
-*system* rendering title and text together, and no single extra holds it. So
-v0.7 relayed the distance string as if it were the instruction.
+Gradle's default debug key is generated fresh on every clean CI runner, so
+**every build had a different signature**. Updating meant uninstalling first —
+which also throws away the notification-access grant, the one permission that
+is awkward to restore.
 
-- **Fields read correctly**: distance from the title, instruction from the
-  text, ETA from the subtext. The route-start case, where the title carries the
-  instruction and there is no distance at all ("Head towards Im Heimgarten"),
-  still works, so neither field is trusted positionally.
-- **ETA keeps its AM/PM**, which a 12-hour phone needs to be unambiguous.
+Builds are now signed with a stable key held in a repository secret, so from
+here on the APK upgrades in place and the grant survives. Builds without the
+secret (a local build, a fork) fall back to the default debug key and still
+work.
 
-**GMapsParser is gone.** It failed on every notification of the test route with
-`Impossible to parse navigation time Arrive 10:36`, because it inflates the
-notification's RemoteViews and Maps now uses the standard template. Its errors
-were also crowding out ours in `last error`. Dropping it removes a dependency,
-about 4 MB, and the JitPack repository.
-
-Confirmed working on the test route: `navigation active: true`, a relayed
-payload of `{m=1, d=, s=Head towards Im Heimgarten, e=10:36, dm=-1}`, and the
-icon classifier correctly reading the up-arrow as STRAIGHT.
+No functional changes to the relay itself; v0.8's parsing is unchanged.
 
 ### Install
 
-1. Download `maps-relay.apk` below on the phone and open it.
-2. Grant notification access, and allow notifications when asked.
-3. The watch app is unchanged since v0.5.
+This is the last release that needs an uninstall first, because it is the one
+introducing the new key:
 
-Garmin Connect Mobile must be installed and paired; it is the transport.
+1. Uninstall Maps Relay if present.
+2. Download `maps-relay.apk` below and open it.
+3. Grant notification access, and allow notifications when asked.
+
+Later versions will install straight over the top.

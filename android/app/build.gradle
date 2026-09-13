@@ -17,12 +17,39 @@ android {
         versionName "0.1"
     }
 
+    // A stable signing key, so successive CI builds can update in place.
+    // Gradle's default debug key is generated fresh on every clean runner, so
+    // each build produced a different signature and Android refused the
+    // upgrade with INSTALL_FAILED_UPDATE_INCOMPATIBLE - you had to uninstall
+    // first, losing the notification-access grant each time.
+    //
+    // The keystore arrives from a repository secret; builds without it fall
+    // back to the default debug key so a local or forked build still works.
+    signingConfigs {
+        release {
+            def ksPath = System.getenv("KEYSTORE_FILE")
+            if (ksPath && file(ksPath).exists()) {
+                storeFile file(ksPath)
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias "mapsrelay"
+                keyPassword System.getenv("KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = '17' }
-    buildTypes { debug { minifyEnabled false } }
+    buildTypes {
+        debug {
+            minifyEnabled false
+            if (System.getenv("KEYSTORE_FILE")) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
 }
 
 dependencies {
