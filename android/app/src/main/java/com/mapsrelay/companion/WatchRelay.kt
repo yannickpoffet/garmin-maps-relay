@@ -58,6 +58,11 @@ object WatchRelay {
     @Volatile var lastSent: String = "-"
         private set
 
+    /** Why the last send was refused before it reached the SDK. "relay not
+     *  ready" on its own says nothing about which of four reasons it was. */
+    @Volatile var notReady: String = ""
+        private set
+
     /** Set by the UI so it can repaint when status changes. */
     @Volatile var onStatusChange: (() -> Unit)? = null
 
@@ -159,11 +164,15 @@ object WatchRelay {
      * step this app could not otherwise avoid — remembering to start the watch
      * app before setting off.
      *
-     * Throttled, because on some devices this prompts on the wrist.
+     * Deliberately only ever called from the button. It was briefly wired to
+     * every failed send, which on this watch answers PROMPT_SHOWN_ON_DEVICE:
+     * it does not launch anything, it asks the wearer — so a route with the
+     * watch app closed turned into a stream of prompts mid-drive. Opening the
+     * app is a decision, so it stays on a button.
      */
     fun openOnWatch(force: Boolean = false) {
         val instance = ciq ?: return
-        val d = device ?: return
+        val d = device ?: run { setStatus("no watch to open on"); return }
         val a = app ?: return
         val now = System.currentTimeMillis()
         if (!force && now - lastOpenAt < OPEN_INTERVAL_MS) return
@@ -190,6 +199,7 @@ object WatchRelay {
         // this every later send returns false forever and the watch just stops
         // updating, with nothing on screen to say why.
         if (ciq == null) {
+            notReady = "SDK not started"
             val c = appContext ?: return false
             val now = System.currentTimeMillis()
             if (now - lastRepickAt > REPICK_INTERVAL_MS) {
@@ -210,13 +220,17 @@ object WatchRelay {
                 pickDevice(instance)
             }
         }
-        val d = device ?: return false
-        val a = app ?: return false
+        val d = device ?: run { notReady = "no watch picked"; return false }
+        val a = app ?: run { notReady = "no watch app id"; return false }
 
         // One message on the wire at a time.
         val started = System.currentTimeMillis()
         val busy = inFlightSince
-        if (busy != 0L && started - busy < SEND_TIMEOUT_MS) return false
+        if (busy != 0L && started - busy < SEND_TIMEOUT_MS) {
+            notReady = "previous send still in flight"
+            return false
+        }
+        notReady = ""
         inFlightSince = started
 
         return try {
@@ -225,9 +239,6 @@ object WatchRelay {
                 lastSent = "$sendStatus @ ${System.currentTimeMillis() / 1000}"
                 if (sendStatus != ConnectIQ.IQMessageStatus.SUCCESS) {
                     Status.lastError = "send: $sendStatus"
-                    // Overwhelmingly this means the watch app is not open.
-                    // Launch it rather than silently dropping the route.
-                    openOnWatch()
                 }
                 Log.i(TAG, "send -> $sendStatus  $payload")
                 onStatusChange?.invoke()

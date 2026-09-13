@@ -1,3 +1,15 @@
+## v0.13 — stop prompting the wrist, and say why a send was refused
+
+v0.12 opened the watch app on every failed send. On this watch that does
+not launch anything: it answers `PROMPT_SHOWN_ON_DEVICE` and asks the
+wearer. With the watch app closed, a route became a stream of prompts.
+
+- **Opening the watch app is back to being a button only.** It is a
+  decision, not something to do automatically mid-drive.
+- **"relay not ready" now says which of four reasons it was** — SDK not
+  started, no watch picked, no app id, or a previous send still in
+  flight. The bare message named none of them.
+
 ## v0.12 — open the watch app instead of failing into it
 
 Every payload was correct and not one of them landed:

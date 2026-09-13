@@ -144,6 +144,9 @@ class MainActivity : Activity() {
             appendLine("listener bound      : ${if (Status.listenerBound) "true" else "FALSE (street/ETA only)"}")
             appendLine("watch               : ${WatchRelay.status}")
             appendLine("last send result    : ${WatchRelay.lastSent}")
+            if (WatchRelay.notReady.isNotEmpty()) {
+                appendLine("send refused        : ${WatchRelay.notReady}")
+            }
             appendLine("osmand              : ${OsmAndLink.status}")
             appendLine("osmand notifs seen  : ${Status.osmandNotifsSeen}")
             appendLine("navigation active   : ${Status.navActive}")
