@@ -12,12 +12,20 @@ class NavState {
 
     public var maneuver as Number = Maneuver.UNKNOWN;
     public var street as String = "";
-    public var distance as String = "";
     public var eta as String = "";
+
+    //! Derived from `meters`, not sent. The phone used to transmit the
+    //! rendered string alongside the number it was rendered from, which is
+    //! about a dozen bytes of pure duplication on a link where the payload
+    //! size is what the update rate is made of.
+    public var distance as String = "";
 
     //! Distance still to travel to the destination, e.g. "8.8 km". Distinct
     //! from `distance`, which is the distance to the next maneuver.
     public var remaining as String = "";
+
+    //! Metres still to travel, from which `remaining` is rendered.
+    public var remainingMeters as Number = -1;
 
     //! The maneuver *after* the next one, and how far away it is in metres.
     //! Google Maps never offered this; OsmAnd reports it in the same breath as
@@ -74,17 +82,24 @@ class NavState {
 
         if (data instanceof Lang.Dictionary) {
             var d = data as Dictionary;
-            maneuver = asNumber(d.get("m"), Maneuver.UNKNOWN);
-            street   = asString(d.get("s"));
-            distance = asString(d.get("d"));
-            eta      = asString(d.get("e"));
-            remaining = asString(d.get("r"));
-            afterManeuver = asNumber(d.get("m2"), Maneuver.UNKNOWN);
-            afterMeters   = asNumber(d.get("dm2"), -1);
-            afterStreet   = asString(d.get("s2"));
-            angle         = asNumber(d.get("a1"), 0);
-            afterAngle    = asNumber(d.get("a2"), 0);
-            meters   = asNumber(d.get("dm"), -1);
+
+            // Absent means unchanged, not empty. The phone sends only the
+            // fields that moved, because on this link the payload size *is*
+            // the update rate: a full one is 117 bytes of which two values
+            // are actually new, and a transfer costs about three seconds.
+            if (d.hasKey("m"))   { maneuver      = asNumber(d.get("m"), maneuver); }
+            if (d.hasKey("s"))   { street        = asString(d.get("s")); }
+            if (d.hasKey("e"))   { eta           = asString(d.get("e")); }
+            if (d.hasKey("m2"))  { afterManeuver = asNumber(d.get("m2"), afterManeuver); }
+            if (d.hasKey("dm2")) { afterMeters   = asNumber(d.get("dm2"), afterMeters); }
+            if (d.hasKey("s2"))  { afterStreet   = asString(d.get("s2")); }
+            if (d.hasKey("a1"))  { angle         = asNumber(d.get("a1"), angle); }
+            if (d.hasKey("a2"))  { afterAngle    = asNumber(d.get("a2"), afterAngle); }
+            if (d.hasKey("dm"))  { meters        = asNumber(d.get("dm"), meters); }
+            if (d.hasKey("rm"))  { remainingMeters = asNumber(d.get("rm"), remainingMeters); }
+
+            distance  = fmt(meters);
+            remaining = fmt(remainingMeters);
             arrived  = (maneuver == Maneuver.ARRIVE);
             offRoute = (maneuver == Maneuver.OFF_ROUTE);
         } else {
@@ -95,6 +110,7 @@ class NavState {
             distance = "";
             eta = "";
             remaining = "";
+            remainingMeters = -1;
             afterManeuver = Maneuver.UNKNOWN;
             afterMeters = -1;
             afterStreet = "";
@@ -104,6 +120,15 @@ class NavState {
             arrived = false;
             offRoute = false;
         }
+    }
+
+    //! Metres as the watch shows them: "348 m" below a kilometre, "2.4 km"
+    //! above it. Done here so the phone never has to send the rendered form
+    //! beside the number it was rendered from.
+    static function fmt(m as Number) as String {
+        if (m < 0) { return ""; }
+        if (m < 1000) { return m.toString() + " m"; }
+        return (m / 100 / 10.0).format("%.1f") + " km";
     }
 
     //! The last payload as text. Only the debug view asks, so this is the

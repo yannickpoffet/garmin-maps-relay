@@ -1,3 +1,30 @@
+## v0.31 — send what changed, not everything, every time
+
+v0.30 stopped the phone overrunning the watch and the link is healthy:
+every ack matches its payload, sequence numbers are consecutive, no
+failed transfers. What is left is the cost of a transfer itself.
+
+The timings say where it goes. Ack at 16:46:59.576, next completion
+callback at 16:47:02.637 — **the transfer takes about three seconds**,
+and the ack only about one. On this link transfer cost tracks payload
+size, and the payload was 117 bytes of which two values were new:
+
+```
+{m=4, d=723 m, s=Rheinfelder Straße, e=17:41, r=17.6 km,
+ m2=2, dm2=391, s2=Eigenstraße, a1=-6, a2=-105, dm=723, n=29}
+```
+
+- **The rendered strings are gone.** `d` was `dm` formatted and `r` was
+  metres formatted; the watch does both itself now. A dozen bytes of
+  pure duplication per message.
+- **Only changed fields are sent.** The watch treats an absent key as
+  unchanged rather than empty, so a typical update carries the maneuver,
+  the distance, and whatever else actually moved — three fields instead
+  of eleven.
+- **A complete payload goes every eighth send**, and at the start of
+  every route, so a message lost in transit cannot leave the watch
+  permanently wrong about a field that has since stopped changing.
+
 ## v0.30 — the ack is too slow to steer with
 
 A live route settled it:

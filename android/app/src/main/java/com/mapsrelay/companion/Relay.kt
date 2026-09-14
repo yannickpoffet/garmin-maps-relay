@@ -54,6 +54,10 @@ object Relay {
         lastStreet = ""
         lastMeters = Int.MIN_VALUE
         pending = null
+        // A new route must start from a full payload; otherwise the watch is
+        // diffed against a baseline from the previous one.
+        lastFull = emptyMap()
+        sinceFull = 0
         lastTrip = null
     }
 
@@ -134,7 +138,7 @@ object Relay {
             lastManeuver = maneuver
             lastStreet = street
             lastMeters = dm
-            pending = payloadOf(maneuver, dm, text, street, trip)
+            pending = payloadOf(maneuver, dm, street, trip)
         }
         onUpdate?.invoke()
         flush()
@@ -158,9 +162,12 @@ object Relay {
         // payload was built is already old by the time it leaves. OsmAnd will
         // answer with the current one for the asking, and the difference is
         // most of a second on every single update.
-        val p = refreshed(queued)
+        val full = refreshed(queued)
+        // Only what the watch does not already know.
+        val p = synchronized(lock) { deltaOf(full) }
 
         if (!WatchRelay.send(p)) return
+        synchronized(lock) { lastFull = full }
         synchronized(lock) {
             // Only clear it if nothing newer arrived while we were sending.
             if (pending === queued) pending = null
@@ -214,22 +221,26 @@ object Relay {
 
         return p + mapOf(
             "dm" to dm,
-            "d" to text,
-            "r" to distanceText(trip.leftDistance),
+            "rm" to trip.leftDistance,
             "e" to clockOf(trip.arrivalTime),
         )
     }
 
-    private fun payloadOf(m: Int, dm: Int, text: String, street: String,
+    /**
+     * The complete state, before any of it is dropped as unchanged.
+     *
+     * No rendered strings: the watch formats metres itself. Sending "723 m"
+     * beside dm=723 was a dozen bytes of pure duplication on a link where the
+     * payload size is the update rate.
+     */
+    private fun payloadOf(m: Int, dm: Int, street: String,
                           trip: OsmAndLink.Trip?): Map<String, Any> = mapOf(
         "m" to m,
-        "d" to text,
+        "dm" to dm,
         "s" to street,
         "e" to clockOf(trip?.arrivalTime ?: 0L),
-        // Trip total, not the next turn. Deliberately absent from the change
-        // test above: it ticks down constantly and would otherwise drive a
-        // send on its own every time it moved.
-        "r" to distanceText(trip?.leftDistance ?: -1),
+        // Trip total, not the next turn.
+        "rm" to (trip?.leftDistance ?: -1),
         // The turn after this one. Nothing else on the watch can warn that a
         // second maneuver follows immediately.
         "m2" to (trip?.afterManeuver ?: Maneuver.UNKNOWN),
@@ -237,8 +248,44 @@ object Relay {
         "s2" to trip?.afterStreet.orEmpty(),
         "a1" to (trip?.nextAngle ?: 0),
         "a2" to (trip?.afterAngle ?: 0),
-        "dm" to dm,
     )
+
+    /** Full state as last transmitted, to diff the next one against. */
+    private var lastFull: Map<String, Any> = emptyMap()
+
+    /** Sends since the last complete payload. */
+    private var sinceFull = 0
+
+    /**
+     * Whittle a full payload down to what the watch does not already have.
+     *
+     * A full payload is 117 bytes and typically two of its eleven values are
+     * new; a transfer costs about three seconds on this link, and cost tracks
+     * size. Dropping the unchanged fields is therefore most of the update
+     * rate, not a micro-optimisation.
+     *
+     * A complete payload goes every FULL_EVERY sends regardless, so a message
+     * lost in transit cannot leave the watch permanently wrong about a field
+     * that has since stopped changing.
+     */
+    private fun deltaOf(full: Map<String, Any>): Map<String, Any> {
+        if (sinceFull >= FULL_EVERY || lastFull.isEmpty()) {
+            sinceFull = 0
+            return full
+        }
+        sinceFull++
+        val out = HashMap<String, Any>()
+        for ((k, v) in full) {
+            if (lastFull[k] != v) out[k] = v
+        }
+        // The maneuver and the distance to it are what the screen is for;
+        // always state them, so a delta is never ambiguous about the turn.
+        out["m"] = full["m"] as Any
+        out["dm"] = full["dm"] as Any
+        return out
+    }
+
+    private const val FULL_EVERY = 8
 
     /** Epoch seconds to a local "14:05", or "" when there is no arrival time. */
     private fun clockOf(epochSeconds: Long): String {
