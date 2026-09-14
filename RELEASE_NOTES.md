@@ -1,3 +1,16 @@
+## v0.20 — "waiting" instead of three em-dashes
+
+While OsmAnd is still calculating a route there is nothing to show yet,
+and the instruction card filled all three of its fields with em-dashes,
+which reads as a fault. It now says it is waiting for the first turn.
+
+Confirmed in the same session that the watch app does open by itself
+when a route starts — `openApplication -> PROMPT_SHOWN_ON_DEVICE`,
+three-quarters of a second after the route began. Note the status: this
+watch asks on the wrist rather than launching silently, so it is one tap
+at route start, not none. That is Garmin's behaviour for a remote open
+and there is no way around it from here.
+
 ## v0.19 — a running OsmAnd is not a running route
 
 The watch app is meant to open by itself when navigation starts, and it

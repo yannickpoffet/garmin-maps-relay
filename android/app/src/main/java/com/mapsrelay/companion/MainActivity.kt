@@ -324,10 +324,19 @@ class MainActivity : Activity() {
         val showing = if (Status.navActive) View.VISIBLE else View.GONE
         instrCard.visibility = showing
         instrLabel.visibility = showing
-        instrTurn.text = "${Maneuver.name(Status.maneuver)}  ${Status.distance}".trim()
-        instrStreet.text = Status.street.ifEmpty { "—" }
-        instrTrip.text = listOf(Status.remaining, Status.eta)
-            .filter { it.isNotEmpty() }.joinToString("  ·  ")
+        // Navigating but nothing relayed yet — OsmAnd is still calculating, or
+        // the first turn has not arrived. Em-dashes in three fields read as a
+        // fault; saying so does not.
+        if (Status.sentCount == 0 && Status.maneuver == Maneuver.UNKNOWN) {
+            instrTurn.text = "waiting"
+            instrStreet.text = "for the first turn from osmand"
+            instrTrip.text = ""
+        } else {
+            instrTurn.text = "${Maneuver.name(Status.maneuver)}  ${Status.distance}".trim()
+            instrStreet.text = Status.street.ifEmpty { "—" }
+            instrTrip.text = listOf(Status.remaining, Status.eta)
+                .filter { it.isNotEmpty() }.joinToString("  ·  ")
+        }
 
         detail.text = buildString {
             appendLine("turns received  ${Status.turnsReceived}")
