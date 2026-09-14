@@ -78,6 +78,8 @@ class MainActivity : Activity() {
             // Enabling us inside OsmAnd sends no signal back, and this screen is
             // where you are standing when you do it. bind() throttles itself.
             OsmAndLink.bind()
+            // The watch can come back without the SDK telling us, so ask.
+            WatchRelay.refreshDeviceStatus()
             render()
             ui.postDelayed(this, 1000)
         }

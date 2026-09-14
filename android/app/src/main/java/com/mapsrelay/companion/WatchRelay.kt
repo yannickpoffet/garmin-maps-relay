@@ -41,6 +41,9 @@ object WatchRelay {
      *  before the last completes gets both FAILURE_DURING_TRANSFER. Nothing
      *  used to stop that, which mattered little when updates were gated to a
      *  handful per turn and matters a great deal now they track every metre. */
+    /** Device we already hold an event registration for. */
+    @Volatile private var registeredFor: Long = -1L
+
     @Volatile private var inFlightSince = 0L
 
     /** How long to wait before assuming a send callback is never coming. A lost
@@ -124,6 +127,7 @@ object WatchRelay {
                 ciq = null
                 device = null
                 app = null
+                registeredFor = -1L
                 setStatus("SDK shut down")
             }
         })
@@ -153,6 +157,22 @@ object WatchRelay {
         device = d
         app = IQApp(WATCH_APP_ID)
 
+        deviceName = nameOf(d)
+
+        // Register once per device, but keep refreshing the status either way.
+        // pickDevice is reachable from a once-a-second poll now, and
+        // re-registering on every call stacks listeners inside the SDK --
+        // while returning early here would skip the refresh below and leave
+        // the flag stale, which is the whole bug being fixed.
+        if (registeredFor != d.deviceIdentifier) {
+            registeredFor = d.deviceIdentifier
+            registerEvents(instance, d)
+        }
+        refreshDeviceStatus()
+        setStatus(deviceName)
+    }
+
+    private fun registerEvents(instance: ConnectIQ, d: IQDevice) {
         try {
             instance.registerForDeviceEvents(d) { dev, st ->
                 // friendlyName comes back empty sometimes, which rendered the
@@ -170,15 +190,37 @@ object WatchRelay {
         } catch (e: Exception) {
             Log.w(TAG, "registerForDeviceEvents failed", e)
         }
-        deviceName = nameOf(d)
-        // knownDevices lists pairings, not live links; take the device's own
-        // word for whether it is actually reachable right now.
-        deviceConnected = try {
-            d.status == IQDevice.IQDeviceStatus.CONNECTED
-        } catch (e: Exception) {
-            false
+    }
+
+    /**
+     * Ask Garmin Connect whether the watch is reachable *now*.
+     *
+     * `IQDevice.status` is a field the SDK stamps on the objects it hands out;
+     * on one from `knownDevices` it is whatever it was last set to, which is
+     * routinely NOT_CONNECTED for a watch sitting right there. Reading it was
+     * turning a perfectly live watch into "NO WATCH".
+     *
+     * Worse, the only other writer was the device-event callback, so once the
+     * flag went false nothing ever revisited it: the screen stayed on NO WATCH
+     * after the watch came back, and pressing any button merely repainted that
+     * stale answer. Hence polling — the UI ticks once a second anyway.
+     */
+    fun refreshDeviceStatus() {
+        val instance = ciq ?: return
+        if (!sdkReady) return
+        val d = device
+        if (d == null) {
+            pickDevice(instance)
+            return
         }
-        setStatus(deviceName)
+        deviceConnected = try {
+            instance.getDeviceStatus(d) == IQDevice.IQDeviceStatus.CONNECTED
+        } catch (e: Exception) {
+            // A failed query says nothing about the watch; keep what we knew
+            // rather than inventing a disconnection.
+            deviceConnected
+        }
+        if (!deviceConnected) appRunning = false
     }
 
     private fun nameOf(d: IQDevice): String {
@@ -203,6 +245,7 @@ object WatchRelay {
      */
     fun openOnWatch(force: Boolean = false) {
         val instance = ciq ?: return
+        refreshDeviceStatus()
         val d = device ?: run { setStatus("no watch to open on"); return }
         val a = app ?: return
         val now = System.currentTimeMillis()

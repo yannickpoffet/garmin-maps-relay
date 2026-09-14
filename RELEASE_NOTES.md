@@ -1,3 +1,23 @@
+## v0.18 — "NO WATCH" while the watch was right there
+
+v0.17 read `IQDevice.status` to decide whether the watch was reachable.
+That is a field the SDK stamps on the objects it hands out, not a live
+query: on one from `knownDevices` it is whatever it was last set to,
+routinely NOT_CONNECTED for a watch sitting connected on your wrist.
+
+And once the flag went false nothing revisited it — the only other
+writer was the device-event callback — so the screen stayed on NO WATCH
+after the watch came back, and pressing any button merely repainted that
+stale answer. Which is exactly what it looked like: press a button, get
+NO WATCH.
+
+- `ConnectIQ.getDeviceStatus()` is the live query, and it is now polled
+  once a second alongside the rest of the screen.
+- A failed query keeps the last known answer instead of inventing a
+  disconnection.
+- Device-event registration happens once per device, since the poll can
+  reach `pickDevice` and re-registering stacks listeners in the SDK.
+
 ## v0.17 — KnogScout's console, and an honest watch indicator
 
 Restyled after the KnogScout console so the two tools read as one: dark
