@@ -46,6 +46,7 @@ object Relay {
      * nothing to parse and nothing to guess -- this is the whole of what used
      * to be MapsNotificationParser plus IconClassifier.
      */
+    @Synchronized
     fun onDirection(info: ADirectionInfo) {
         val meters = info.distanceTo
         var maneuver = Maneuver.fromTurnType(info.turnType)

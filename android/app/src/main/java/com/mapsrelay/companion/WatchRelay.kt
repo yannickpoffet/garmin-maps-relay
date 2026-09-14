@@ -59,6 +59,20 @@ object WatchRelay {
      */
     private const val ACK_TIMEOUT_MS = 2500L
 
+    /**
+     * Spacing to fall back on while the watch has never acknowledged anything.
+     *
+     * Without this the handshake punishes its own failure: no acks means every
+     * payload waits out the full timeout, so the display crawls at one update
+     * per 2.5 s — far worse than the fixed interval the handshake replaced. A
+     * watch that is not acking is not doing flow control, so there is nothing
+     * to wait for; pace it and move on.
+     */
+    private const val NO_ACK_INTERVAL_MS = 500L
+
+    /** True once the watch has ever acknowledged a payload. */
+    @Volatile private var everAcked = false
+
     /** Round trip of the last acknowledged payload, in milliseconds — real
      *  evidence of how fast the link actually is. */
     @Volatile var lastRoundTripMs: Long = -1L
@@ -167,13 +181,25 @@ object WatchRelay {
             return
         }
         val old = device
+        val oldApp = app
         if (old != null) {
-            // Re-registering without this stacks a second listener for the
-            // same device inside the SDK.
+            // Both registrations, not just the device one. Clearing
+            // registeredFor below makes pickDevice register again, so dropping
+            // only half of it stacked a second app-event listener on every
+            // press -- and a stacked listener means the SDK delivers each
+            // message status twice, which is visible in the log as the same
+            // payload and sequence number "sent" twice.
             try {
                 instance.unregisterForDeviceEvents(old)
             } catch (e: Exception) {
                 Log.w(TAG, "unregisterForDeviceEvents failed", e)
+            }
+            if (oldApp != null) {
+                try {
+                    instance.unregisterForApplicationEvents(old, oldApp)
+                } catch (e: Exception) {
+                    Log.w(TAG, "unregisterForApplicationEvents failed", e)
+                }
             }
         }
         device = null
@@ -255,6 +281,7 @@ object WatchRelay {
     private fun registerAcks(instance: ConnectIQ, d: IQDevice) {
         val a = app ?: return
         try {
+            Log.i(TAG, "registering for watch app events")
             instance.registerForAppEvents(d, a) { _, _, messages, _ ->
                 val now = System.currentTimeMillis()
                 var seq = -1
@@ -262,8 +289,10 @@ object WatchRelay {
                     val map = m as? Map<*, *> ?: continue
                     seq = (map["ack"] as? Number)?.toInt() ?: continue
                 }
+                Log.i(TAG, "watch -> ack $seq (awaiting $inFlightSeq)")
                 if (seq < 0) return@registerForAppEvents
 
+                everAcked = true
                 appRunning = true
                 lastAckAt = now
                 // Ignore a late ack for a payload already given up on; it
@@ -356,6 +385,7 @@ object WatchRelay {
      * Delivery is not guaranteed even on true: if the watch app is not open,
      * Garmin drops the message. That is a platform constraint, not a bug here.
      */
+    @Synchronized
     fun send(payloadIn: Map<String, Any>): Boolean {
         // Sequence number, so an ack can be matched to the payload that earned
         // it and a late one for an abandoned payload can be told apart.
@@ -393,8 +423,9 @@ object WatchRelay {
         // passed that no ack is coming.
         val started = System.currentTimeMillis()
         val busy = inFlightSince
-        if (busy != 0L && started - busy < ACK_TIMEOUT_MS) {
-            notReady = "waiting for watch ack"
+        val wait = if (everAcked) ACK_TIMEOUT_MS else NO_ACK_INTERVAL_MS
+        if (busy != 0L && started - busy < wait) {
+            notReady = if (everAcked) "waiting for watch ack" else "pacing (no acks yet)"
             return false
         }
         notReady = ""

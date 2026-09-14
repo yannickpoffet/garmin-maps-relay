@@ -1,3 +1,25 @@
+## v0.23 — the handshake was punishing its own failure
+
+From a live route: no ack ever arrived, so every payload waited out the
+full 2.5 s timeout and the display crawled at one update per 2.5 s —
+considerably worse than the fixed interval the handshake replaced.
+
+- **A watch that has never acked is paced at 500 ms instead of waiting
+  for a timeout.** It is not doing flow control, so there is nothing to
+  wait for. The handshake takes over the moment a first ack arrives.
+- **The ack path had no logging at all**, which is why it could fail
+  silently. Registration and every ack received are now logged.
+- **`reconnect` stacked a listener per press.** It cleared the
+  registration guard but only unregistered *device* events, so
+  `pickDevice` added a second application-event listener each time — and
+  a stacked listener makes the SDK deliver each message status twice.
+  That is visible in the log as the same payload and sequence number
+  "sent" twice, and as stale distances reaching the watch after newer
+  ones were dropped.
+- **The send path is serialised.** OsmAnd delivers turns on several
+  Binder threads and they were racing `nextSeq`, `lastMeters` and the
+  in-flight slot.
+
 ## v0.22 — a real handshake, and roundabouts that mean it
 
 **Every change is sent now.** The send test keyed on the *rendered*
