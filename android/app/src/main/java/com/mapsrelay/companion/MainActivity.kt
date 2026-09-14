@@ -292,7 +292,7 @@ class MainActivity : Activity() {
             return Verdict(S_OFF, "READY", "start navigating in osmand")
         }
         return Verdict(S_OK, "RELAYING",
-            "${Status.sentCount} acknowledged by the watch" +
+            "${Status.ackedCount} acknowledged by the watch" +
             if (WatchRelay.lastRoundTripMs >= 0) ", ${WatchRelay.lastRoundTripMs} ms round trip" else "")
     }
 
@@ -365,7 +365,7 @@ class MainActivity : Activity() {
 
         detail.text = buildString {
             appendLine("turns received  ${Status.turnsReceived}")
-            appendLine("relayed         ${Status.sentCount}")
+            appendLine("sent / acked    ${Status.sentCount} / ${Status.ackedCount}")
             appendLine("osmand notifs   ${Status.osmandNotifsSeen}")
             appendLine("last turn       ${Status.lastTurnType}")
             appendLine("last send       ${WatchRelay.lastSent}")

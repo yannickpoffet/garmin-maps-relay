@@ -296,7 +296,14 @@ object Status {
      *  this says whether the fault is the mapping or the source. */
     @Volatile var lastTurnType = "-"
 
+    /** Payloads handed to the SDK. Not the same as payloads that arrived:
+     *  this counts the attempt, which is why it needs `ackedCount` beside it
+     *  to mean anything. */
     @Volatile var sentCount = 0
+
+    /** Payloads the watch app acknowledged. The only count that says the watch
+     *  actually got something and did something with it. */
+    @Volatile var ackedCount = 0
     @Volatile var lastPayload = "-"
     @Volatile var lastError = "-"
 

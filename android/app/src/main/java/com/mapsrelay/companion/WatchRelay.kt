@@ -309,6 +309,7 @@ object WatchRelay {
 
                 everAcked = true
                 appRunning = true
+                Status.ackedCount++
                 // The link is demonstrably working; an old failure message
                 // sitting on the status screen is now just misinformation.
                 if (Status.lastError.startsWith("send:")) Status.lastError = "-"

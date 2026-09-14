@@ -45,8 +45,13 @@ class NavState {
     //! route any more.
     public var offRoute as Boolean = false;
 
-    //! Raw payload as received, kept for the M0 debug view.
-    public var raw as String = "";
+    //! Raw payload as received, for the debug view.
+    //!
+    //! Held as the object, not as text. Stringifying it on arrival meant
+    //! building a long string out of eleven fields on every message, about
+    //! once a second, on a watch with a tight memory budget — all of it thrown
+    //! away unread unless the debug view happened to be open.
+    private var _raw as Object? = null;
 
     //! True once any message has ever arrived.
     public var everReceived as Boolean = false;
@@ -63,7 +68,7 @@ class NavState {
     //! companion sends, and degrades to showing a bare string unchanged, which
     //! is what makes the M0 "send any text" test possible.
     function apply(data as Object?) as Void {
-        raw = (data == null) ? "null" : data.toString();
+        _raw = data;
         everReceived = true;
         _lastUpdate = now();
 
@@ -86,7 +91,7 @@ class NavState {
             // Not a nav payload — show it as the street line so M0 can be
             // verified without the parser existing yet.
             maneuver = Maneuver.UNKNOWN;
-            street = raw;
+            street = rawText();
             distance = "";
             eta = "";
             remaining = "";
@@ -99,6 +104,12 @@ class NavState {
             arrived = false;
             offRoute = false;
         }
+    }
+
+    //! The last payload as text. Only the debug view asks, so this is the
+    //! one place that pays for the conversion.
+    function rawText() as String {
+        return (_raw == null) ? "null" : _raw.toString();
     }
 
     //! Identifies the current turn, so alerts can re-arm when it changes.

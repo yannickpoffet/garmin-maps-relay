@@ -1,3 +1,22 @@
+## v0.29 — "relayed" was counting attempts, not arrivals
+
+The phone display is instant now; the watch sometimes sits still across
+several "relayed" messages. Before guessing at why, the counter needs to
+stop lying: `relayed` incremented when a payload was handed to the SDK,
+not when the watch got it, so it counted attempts that may never have
+landed.
+
+`sent / acked` is now shown as a pair. Only the second number means the
+watch received a payload and acted on it, since the ack is sent by the
+watch app itself. If the two diverge, messages are being lost on the
+link; if they track and the screen still lags, the fault is on the watch.
+
+**The watch also stopped stringifying every payload.** `NavState` built
+a long string out of all eleven fields on arrival, about once a second,
+on a device with a tight memory budget — and threw it away unread unless
+the debug view happened to be open. It keeps the object and converts
+only when that view asks.
+
 ## v0.28 — one update behind, and why
 
 v0.27's send-time refresh also wrote the refreshed distance into the

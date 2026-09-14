@@ -229,7 +229,7 @@ class NavView extends WatchUi.View {
         y += lh;
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        var text = _state.everReceived ? _state.raw : "(nothing received)";
+        var text = _state.everReceived ? _state.rawText() : "(nothing received)";
         var lines = wrap(dc, text, Graphics.FONT_XTINY, (_w * 0.78).toNumber(), 7);
         for (var i = 0; i < lines.size(); i++) {
             dc.drawText(_w / 2, y, Graphics.FONT_XTINY, lines[i], Graphics.TEXT_JUSTIFY_CENTER);
