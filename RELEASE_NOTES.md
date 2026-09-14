@@ -1,3 +1,23 @@
+## v0.28 — one update behind, and why
+
+v0.27's send-time refresh also wrote the refreshed distance into the
+dedupe state. So the dedupe ran one step ahead of OsmAnd: the refresh
+advanced it to 880, OsmAnd's next callback arrived carrying 880, the
+dedupe called it a repeat and swallowed it. Every other update vanished
+and the display sat exactly one behind — which is precisely how it was
+described.
+
+`lastMeters` tracks the callback stream again. The send-time refresh
+leaves it alone; the two are separate concerns and conflating them cost
+every second update.
+
+**The display is also polled now, four times a second.** OsmAnd's turn
+callback fires on route-data updates, roughly once a second, while
+OsmAnd's own screen moves more smoothly than that — so waiting for the
+callback left this screen a beat behind for no reason. It reads OsmAnd's
+state directly instead. The send path is untouched: the watch is paced
+by the link, and its payload is refreshed as it leaves.
+
 ## v0.27 — send the distance as it is now, not as it was when queued
 
 A review of the whole path for staleness, rather than another symptom fix.

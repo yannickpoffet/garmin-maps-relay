@@ -73,17 +73,27 @@ class MainActivity : Activity() {
 
     private fun dpi(v: Float) = Ui.dpi(this, v)
 
+    /** Fast tick for the display, slow tick for anything that costs. */
+    private var ticks = 0
+
     private val refresh = object : Runnable {
         override fun run() {
-            // Enabling us inside OsmAnd sends no signal back, and this screen is
-            // where you are standing when you do it. bind() throttles itself.
-            OsmAndLink.bind()
-            // The watch can come back without the SDK telling us, so ask.
-            WatchRelay.refreshDeviceStatus()
-            // Backstop: if an ack was lost, the queued payload still goes.
-            Relay.flush()
+            // Read the instruction straight from OsmAnd rather than waiting for
+            // its next turn callback, so this screen is as current as OsmAnd's.
+            Relay.pollDisplay()
             render()
-            ui.postDelayed(this, 1000)
+
+            // The rest is housekeeping and does not need four times a second.
+            if (ticks++ % 4 == 0) {
+                // Enabling us inside OsmAnd sends no signal back, and this
+                // screen is where you stand when you do it. bind() throttles.
+                OsmAndLink.bind()
+                // The watch can come back without the SDK telling us, so ask.
+                WatchRelay.refreshDeviceStatus()
+                // Backstop: if an ack was lost, the queued payload still goes.
+                Relay.flush()
+            }
+            ui.postDelayed(this, 250)
         }
     }
 

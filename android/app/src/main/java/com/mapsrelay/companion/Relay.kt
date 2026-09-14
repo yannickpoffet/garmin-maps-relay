@@ -172,6 +172,25 @@ object Relay {
         onUpdate?.invoke()
     }
 
+    /**
+     * Refresh the displayed instruction straight from OsmAnd.
+     *
+     * The turn callback only fires on route-data updates, about once a second,
+     * while OsmAnd's own screen moves more smoothly than that. Polling its
+     * state for the display means the phone reads as current as OsmAnd itself
+     * rather than a callback behind. Nothing here touches the send path — the
+     * watch is paced by the link, and a payload is refreshed as it leaves.
+     */
+    fun pollDisplay() {
+        if (!Status.navActive) return
+        val trip = OsmAndLink.trip() ?: return
+        if (trip.nextDistance >= 0) Status.distance = distanceText(trip.nextDistance)
+        Status.remaining = distanceText(trip.leftDistance)
+        Status.eta = clockOf(trip.arrivalTime)
+        if (trip.street.isNotEmpty()) Status.street = trip.street
+        onUpdate?.invoke()
+    }
+
     /** The queued payload with its distances and ETA brought up to date. */
     private fun refreshed(p: Map<String, Any>): Map<String, Any> {
         val trip = OsmAndLink.trip() ?: return p
@@ -183,9 +202,12 @@ object Relay {
         if (dm < 0) return p
 
         val text = distanceText(dm)
-        // Keep the dedupe honest: "already sent" has to mean the value that
-        // actually went, not the one that was queued.
-        synchronized(lock) { lastMeters = dm }
+        // Deliberately does NOT touch lastMeters. That tracks the callback
+        // stream, and writing the refreshed value into it ran the dedupe one
+        // step ahead of OsmAnd: the refresh would advance it to 880, OsmAnd's
+        // next callback would arrive carrying 880, the dedupe would call it a
+        // repeat and swallow it. Every other update vanished and the display
+        // sat exactly one behind.
         Status.distance = text
         Status.remaining = distanceText(trip.leftDistance)
         Status.eta = clockOf(trip.arrivalTime)
