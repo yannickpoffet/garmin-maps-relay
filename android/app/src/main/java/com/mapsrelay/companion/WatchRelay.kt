@@ -35,20 +35,38 @@ object WatchRelay {
      *  onSdkReady throws "SDK not initialized". */
     @Volatile private var sdkReady = false
 
-    /** When the in-flight send started, or 0 when idle.
-     *
-     *  Connect IQ carries one message at a time over BLE, and starting another
-     *  before the last completes gets both FAILURE_DURING_TRANSFER. Nothing
-     *  used to stop that, which mattered little when updates were gated to a
-     *  handful per turn and matters a great deal now they track every metre. */
     /** Device we already hold an event registration for. */
     @Volatile private var registeredFor: Long = -1L
 
+    /** When the in-flight payload was sent, or 0 when idle.
+     *
+     *  Connect IQ carries one message at a time over BLE, and the watch app
+     *  acknowledges each payload, so this is a real handshake: one out, wait
+     *  for the ack, then the next. The link then runs at exactly the rate the
+     *  round trip allows, rather than at an interval guessed in advance. */
     @Volatile private var inFlightSince = 0L
 
-    /** How long to wait before assuming a send callback is never coming. A lost
-     *  callback must not wedge the link shut for the rest of the route. */
-    private const val SEND_TIMEOUT_MS = 4000L
+    /** Sequence number of the payload awaiting acknowledgement. */
+    @Volatile private var inFlightSeq = 0
+    private var nextSeq = 1
+
+    /**
+     * How long to wait for an ack before sending regardless.
+     *
+     * A fallback, not the pacing mechanism. A watch app that never acks is a
+     * watch app that is not running, and the display has nothing to lose from
+     * another attempt.
+     */
+    private const val ACK_TIMEOUT_MS = 2500L
+
+    /** Round trip of the last acknowledged payload, in milliseconds — real
+     *  evidence of how fast the link actually is. */
+    @Volatile var lastRoundTripMs: Long = -1L
+        private set
+
+    /** When the watch app last acknowledged anything. */
+    @Volatile var lastAckAt: Long = 0L
+        private set
 
     /** Last attempt to launch the watch app, so a failing route does not
      *  prompt on the wrist every second. */
@@ -199,6 +217,7 @@ object WatchRelay {
         if (registeredFor != d.deviceIdentifier) {
             registeredFor = d.deviceIdentifier
             registerEvents(instance, d)
+            registerAcks(instance, d)
         }
         refreshDeviceStatus()
         setStatus(deviceName)
@@ -221,6 +240,43 @@ object WatchRelay {
             }
         } catch (e: Exception) {
             Log.w(TAG, "registerForDeviceEvents failed", e)
+        }
+    }
+
+    /**
+     * Listen for messages coming back from the watch app.
+     *
+     * This is the half that makes the handshake real. The send callback only
+     * reports that Garmin took the message off our hands; it says nothing
+     * about whether an app was there to receive it. An ack is sent by the
+     * watch app itself, so it is proof the app is running and processing —
+     * which is exactly the evidence this screen never had.
+     */
+    private fun registerAcks(instance: ConnectIQ, d: IQDevice) {
+        val a = app ?: return
+        try {
+            instance.registerForAppEvents(d, a) { _, _, messages, _ ->
+                val now = System.currentTimeMillis()
+                var seq = -1
+                for (m in messages.orEmpty()) {
+                    val map = m as? Map<*, *> ?: continue
+                    seq = (map["ack"] as? Number)?.toInt() ?: continue
+                }
+                if (seq < 0) return@registerForAppEvents
+
+                appRunning = true
+                lastAckAt = now
+                // Ignore a late ack for a payload already given up on; it
+                // would otherwise credit the wrong round trip and open the
+                // gate for a send that is already in flight.
+                if (seq == inFlightSeq && inFlightSince != 0L) {
+                    lastRoundTripMs = now - inFlightSince
+                    inFlightSince = 0L
+                }
+                onStatusChange?.invoke()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "registerForAppEvents failed", e)
         }
     }
 
@@ -300,7 +356,10 @@ object WatchRelay {
      * Delivery is not guaranteed even on true: if the watch app is not open,
      * Garmin drops the message. That is a platform constraint, not a bug here.
      */
-    fun send(payload: Map<String, Any>): Boolean {
+    fun send(payloadIn: Map<String, Any>): Boolean {
+        // Sequence number, so an ack can be matched to the payload that earned
+        // it and a late one for an abandoned payload can be told apart.
+        val payload = payloadIn + ("n" to nextSeq)
         // Garmin Connect can shut the SDK down under us mid-route. Without
         // this every later send returns false forever and the watch just stops
         // updating, with nothing on screen to say why.
@@ -329,27 +388,33 @@ object WatchRelay {
         val d = device ?: run { notReady = "no watch picked"; return false }
         val a = app ?: run { notReady = "no watch app id"; return false }
 
-        // One message on the wire at a time.
+        // One payload in flight, and the *watch* decides when the next may go:
+        // nothing leaves until the last one is acknowledged, or long enough has
+        // passed that no ack is coming.
         val started = System.currentTimeMillis()
         val busy = inFlightSince
-        if (busy != 0L && started - busy < SEND_TIMEOUT_MS) {
-            notReady = "previous send still in flight"
+        if (busy != 0L && started - busy < ACK_TIMEOUT_MS) {
+            notReady = "waiting for watch ack"
             return false
         }
         notReady = ""
         inFlightSince = started
+        inFlightSeq = nextSeq
 
         return try {
             instance.sendMessage(d, a, payload) { _, _, sendStatus ->
-                inFlightSince = 0L
-                lastSent = "$sendStatus @ ${System.currentTimeMillis() / 1000}"
-                appRunning = (sendStatus == ConnectIQ.IQMessageStatus.SUCCESS)
-                if (!appRunning) {
+                lastSent = "$sendStatus"
+                if (sendStatus != ConnectIQ.IQMessageStatus.SUCCESS) {
+                    // It never left, so nothing will ack it. Free the slot now
+                    // rather than making the next payload wait out the timeout.
+                    inFlightSince = 0L
+                    appRunning = false
                     Status.lastError = "send: $sendStatus"
                 }
                 Log.i(TAG, "send -> $sendStatus  $payload")
                 onStatusChange?.invoke()
             }
+            nextSeq++
             true
         } catch (e: Exception) {
             inFlightSince = 0L

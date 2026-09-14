@@ -74,7 +74,7 @@ def head(d, x, y, dx, dy, t, color):
                (x - px * HEAD_HALF * t, y - py * HEAD_HALF * t)], fill=color)
 
 
-def draw_maneuver(d, m, cx, cy, size, color):
+def draw_maneuver(d, m, cx, cy, size, color, angle=0):
     """Mirror of Maneuver.draw.
 
     Every shape is built the same way: decide where the arrow tip goes, put
@@ -161,11 +161,13 @@ def draw_maneuver(d, m, cx, cy, size, color):
         d.ellipse([cx - r, ring_cy - r, cx + r, ring_cy + r],
                   outline=color, width=max(t // 2, 2))
         seg(d, cx, base_y, cx, ring_cy + r, t, color)
-        # Short exit tangent. A long one turns the whole glyph into a symbol
-        # that reads as something else entirely.
-        # Exit at 3 o'clock pointing right. A 45-degree exit plus a ring and
-        # a stem below is, unfortunately, exactly the Mars symbol.
-        arrow_to([(cx + r, ring_cy)], cx + r + 3 * t, ring_cy, 1, 0)
+        # Exit where you actually leave. This was nailed to 3 o'clock, so a
+        # roundabout driven straight through drew as "take the right-hand
+        # exit" -- a different instruction from the one being given.
+        ea = math.radians(angle - 90)
+        ux, uy = math.cos(ea), math.sin(ea)
+        arrow_to([(cx + r * ux, ring_cy + r * uy)],
+                 cx + (r + 3 * t) * ux, ring_cy + (r + 3 * t) * uy, ux, uy)
 
     elif m == ARRIVE:
         # Pin: ring on a stem, which reads as a destination marker.
@@ -244,7 +246,7 @@ def join_footer(left, right):
     return f"{left} \u00b7 {right}"
 
 
-def render(m, distance, street, eta, remaining="", stale=False):
+def render(m, distance, street, eta, remaining="", stale=False, angle=0):
     """Mirror of NavView.drawNav."""
     img = Image.new("RGB", (W, H), (0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -265,7 +267,7 @@ def render(m, distance, street, eta, remaining="", stale=False):
             ty += lh
     else:
         arrow_size = int(H * 0.34)
-        draw_maneuver(d, m, cx, int(H * 0.30), arrow_size, accent)
+        draw_maneuver(d, m, cx, int(H * 0.30), arrow_size, accent, angle)
 
     if distance:
         draw_distance(d, cx, int(H * 0.46), distance, fg)
@@ -306,7 +308,9 @@ def sheet():
         (SHARP_RIGHT, "30 m", "Rue du Pont", "12:48", "4.8 km"),
         (STRAIGHT, "2.4 km", "Autoroute A12", "12:55", "3.2 km"),
         (UTURN, "90 m", "Route Cantonale", "12:58", "2.6 km"),
-        (ROUNDABOUT, "300 m", "Giratoire, 3e sortie", "13:02", "1.9 km"),
+        (ROUNDABOUT, "300 m", "roundabout, straight", "13:02", "1.9 km", 0),
+        (ROUNDABOUT, "300 m", "roundabout, right", "13:02", "1.9 km", 90),
+        (ROUNDABOUT, "300 m", "roundabout, left", "13:02", "1.9 km", -90),
         (MERGE, "600 m", "A1 direction Bern", "13:09", "1.4 km"),
         (FORK_LEFT, "700 m", "Sortie 12", "13:12", "980 m"),
         (UNKNOWN, "150 m", "Unrecognised maneuver", "13:15", "700 m"),
@@ -322,11 +326,13 @@ def sheet():
         (18, 18, 18))
     dd = ImageDraw.Draw(sheet_img)
     lf = ImageFont.truetype(f"{FONT_DIR}/DejaVuSans.ttf", 13)
-    for i, (m, dist, street, eta, rem) in enumerate(cases):
+    for i, case in enumerate(cases):
+        m, dist, street, eta, rem = case[:5]
+        ang = case[5] if len(case) > 5 else 0
         r, c = divmod(i, cols)
         x = pad + c * (W + pad)
         y = pad + r * (H + pad + label_h)
-        sheet_img.paste(render(m, dist, street, eta, rem), (x, y))
+        sheet_img.paste(render(m, dist, street, eta, rem, angle=ang), (x, y))
         dd.text((x + W // 2, y + H + 3), f"{i}  {NAMES[m]}", font=lf,
                 fill=(160, 160, 160), anchor="ma")
     return sheet_img

@@ -129,8 +129,14 @@ module Maneuver {
     // ----------------------------------------------------------------- shapes
 
     //! Draw the maneuver centred on (cx, cy) fitting a box of `size` pixels.
+    //!
+    //! `angle` is the turn angle in degrees, positive clockwise (right),
+    //! straight ahead being zero. Only the roundabout uses it, and it needs it
+    //! badly: every other glyph means one thing, but a roundabout is a
+    //! different instruction depending on which exit you take.
     function draw(dc as Graphics.Dc, m as Number, cx as Number, cy as Number,
-                  size as Number, color as Graphics.ColorType) as Void {
+                  size as Number, color as Graphics.ColorType,
+                  angle as Number) as Void {
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
 
         var h = size / 2;
@@ -214,16 +220,28 @@ module Maneuver {
                 break;
 
             case ROUNDABOUT:
-                // Ring, entry stub at the bottom, exit at 3 o'clock. The exit
-                // must not leave at 45 degrees: a ring with a diagonal arrow
-                // and a stem below is, unfortunately, the Mars symbol.
+                // Ring, entry stub at the bottom, exit where you actually
+                // leave. The exit used to be nailed to 3 o'clock, so a
+                // roundabout you drive straight through drew as "take the
+                // right-hand exit" — a different instruction from the one
+                // being given.
+                //
+                // Straight ahead is 12 o'clock and the angle turns clockwise
+                // from there, matching the sign convention in the payload:
+                // left turns arrive negative, right turns positive.
                 var rr = fh * 0.62;
                 var ringY = fcy - t / 2.0;
                 dc.setPenWidth(ringWidth(t));
                 dc.drawCircle(cx, ringY.toNumber(), rr.toNumber());
                 dc.setPenWidth(1);
                 seg(dc, fcx, baseY, fcx, ringY + rr, t);
-                arrowTo(dc, fcx + rr, ringY, fcx + rr + 3 * t, ringY, 1.0, 0.0, t);
+
+                var ea = (angle - 90) * Math.PI / 180.0;
+                var ux = Math.cos(ea);
+                var uy = Math.sin(ea);
+                arrowTo(dc, fcx + rr * ux, ringY + rr * uy,
+                        fcx + (rr + 3 * t) * ux, ringY + (rr + 3 * t) * uy,
+                        ux, uy, t);
                 break;
 
             case ARRIVE:

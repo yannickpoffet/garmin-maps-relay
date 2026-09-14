@@ -1,3 +1,31 @@
+## v0.22 — a real handshake, and roundabouts that mean it
+
+**Every change is sent now.** The send test keyed on the *rendered*
+string, which looked sensible and was not: above a kilometre the display
+reads "2.4 km" and only moves every 100 m, so the watch sat still for a
+hundred metres at a time while OsmAnd counted down beside it. It now
+sends on any change at all, down to a single metre.
+
+**The watch acknowledges each payload, and the phone waits for it.** One
+payload out, wait for the ack, send the next — so the link runs at
+exactly the rate the round trip allows instead of at an interval guessed
+in advance. Every previous value was such a guess: 1000 ms, then 400 ms.
+The floor is now zero.
+
+This also answers a question nothing else could. Connect IQ's send status
+says the message left the phone, not that an app was there to take it —
+which is why `FAILURE_DURING_TRANSFER` was so confusing. An ack is sent
+by the watch app itself, so it is proof the app is running and
+processing. The status screen shows the measured round trip, and
+`watch app` reads "acking, 180 ms" rather than the guess it was making
+before.
+
+**Roundabouts drew the wrong instruction.** The exit arrow was nailed to
+3 o'clock, so a roundabout you drive straight through rendered as "take
+the right-hand exit". The exit now follows the turn angle, which was
+already in the payload and unused: 12 o'clock for straight through, and
+round from there.
+
 ## v0.21 — the reconnect button now reconnects
 
 It called `WatchRelay.start()`, which opens with `if (ciq != null) return`

@@ -120,7 +120,7 @@ class NavView extends WatchUi.View {
             // Arrow occupies the upper half.
             var arrowSize = (_h * 0.34).toNumber();
             Maneuver.draw(dc, _state.maneuver, cx, (_h * 0.30).toNumber(),
-                          arrowSize, accent);
+                          arrowSize, accent, _state.angle);
         }
 
         // Distance to the maneuver is the number you actually act on, so it
@@ -210,7 +210,7 @@ class NavView extends WatchUi.View {
     function drawArrival(dc as Graphics.Dc) as Void {
         var cx = _w / 2;
         Maneuver.draw(dc, Maneuver.ARRIVE, cx, (_h * 0.32).toNumber(),
-                      (_h * 0.26).toNumber(), Graphics.COLOR_GREEN);
+                      (_h * 0.26).toNumber(), Graphics.COLOR_GREEN, 0);
         dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, (_h * 0.52).toNumber(), Graphics.FONT_MEDIUM, "Arrived",
                     Graphics.TEXT_JUSTIFY_CENTER);

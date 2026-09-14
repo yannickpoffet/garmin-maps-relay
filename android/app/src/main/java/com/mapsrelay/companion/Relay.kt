@@ -24,7 +24,7 @@ object Relay {
 
     private var lastManeuver = -1
     private var lastStreet = ""
-    private var lastDistanceText = ""
+    private var lastMeters = Int.MIN_VALUE
     private var lastSentAt = 0L
 
     /** Last good trip read, kept so one failed getAppInfo() call blanks
@@ -35,7 +35,7 @@ object Relay {
     fun reset() {
         lastManeuver = -1
         lastStreet = ""
-        lastDistanceText = ""
+        lastMeters = Int.MIN_VALUE
         lastTrip = null
     }
 
@@ -78,25 +78,24 @@ object Relay {
         val dm = if (maneuver == Maneuver.OFF_ROUTE) -1 else meters
         val text = distanceText(dm)
 
-        // Send whenever what the watch *displays* would change — not on coarse
-        // distance buckets, which is what this used to do. Those edges were
-        // 20/50/100/200/500/1000/2000/5000 m, so the whole stretch from 500 m
-        // down to 201 m sent nothing at all and the number on the wrist sat
-        // frozen while OsmAnd's own screen counted down.
+        // Send on any change at all, including a single metre.
         //
-        // Keying on the rendered string is self-limiting: under 1 km it changes
-        // every metre, so the cadence is set by the time floor below; above it
-        // the display reads "2.4 km" and only moves every 100 m travelled.
-        if (maneuver == lastManeuver && street == lastStreet && text == lastDistanceText) {
+        // This used to key on the *rendered* string, which looked reasonable
+        // and was not: above a kilometre the display reads "2.4 km" and only
+        // moves every 100 m, so the watch sat still for a hundred metres at a
+        // time while OsmAnd counted down beside it. Rate is no longer this
+        // function's problem — the handshake in WatchRelay paces the link, one
+        // payload at a time, as fast as the watch acknowledges them.
+        if (maneuver == lastManeuver && street == lastStreet && dm == lastMeters) {
             return
         }
-        // Only record what was actually sent. Recording a throttled update as
-        // sent would suppress every later identical one and freeze the display
-        // for good — harmless with buckets, fatal per-metre.
+        // Only record what was actually sent. Recording a refused update as
+        // sent would suppress every later identical payload and freeze the
+        // display for good.
         if (!send(maneuver, dm, text, street, trip)) return
         lastManeuver = maneuver
         lastStreet = street
-        lastDistanceText = text
+        lastMeters = dm
     }
 
     /** @return true if the payload was handed to the transport. */
@@ -163,10 +162,16 @@ object Relay {
         else -> String.format("%.1f km", meters / 1000.0)
     }
 
-    /** Ceiling on send rate. Low enough not to interfere with OsmAnd's roughly
-     *  1 Hz updates, high enough that a chatty source cannot flood the BLE
-     *  link. The display-change test is what actually paces sends. */
-    private const val MIN_SEND_INTERVAL_MS = 400L
+    /**
+     * No floor at all: the watch's acknowledgement is the flow control now.
+     *
+     * Every earlier value here was a guess at how fast the link could go —
+     * 1000 ms, then 400 ms — and a guess is either too slow or too fast. The
+     * handshake measures it instead: one payload out, wait for the ack, send
+     * the next. Kept as a named constant because a future flood would want a
+     * ceiling, not because this one does.
+     */
+    private const val MIN_SEND_INTERVAL_MS = 0L
 
     /** Below this many metres left to the destination, the route is done. */
     private const val ARRIVAL_METERS = 30

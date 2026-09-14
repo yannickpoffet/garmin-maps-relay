@@ -251,8 +251,9 @@ class MainActivity : Activity() {
         }
         if (Status.navActive && !WatchRelay.appRunning) {
             return Verdict(S_WARN, "APP CLOSED",
-                "the watch is connected but maps relay is not open on it.\n" +
-                "garmin drops messages aimed at an app that is not running",
+                "the watch is connected but nothing is acknowledging.\n" +
+                "maps relay is not open on it, and garmin drops messages\n" +
+                "aimed at an app that is not running",
                 "open on watch") { WatchRelay.openOnWatch(force = true); render() }
         }
         if (!Status.listenerBound) {
@@ -276,7 +277,9 @@ class MainActivity : Activity() {
         if (!Status.navActive) {
             return Verdict(S_OFF, "READY", "start navigating in osmand")
         }
-        return Verdict(S_OK, "RELAYING", "${Status.sentCount} messages sent to the watch")
+        return Verdict(S_OK, "RELAYING",
+            "${Status.sentCount} acknowledged by the watch" +
+            if (WatchRelay.lastRoundTripMs >= 0) ", ${WatchRelay.lastRoundTripMs} ms round trip" else "")
     }
 
     private fun render() {
@@ -308,9 +311,15 @@ class MainActivity : Activity() {
             if (WatchRelay.deviceConnected) S_OK else S_BAD,
             if (WatchRelay.deviceConnected) "${WatchRelay.deviceName} connected"
             else WatchRelay.status)
+        // An ack comes from the watch app itself, so it is the only positive
+        // proof the app is running — and the round trip is how fast it is.
         rowApp.set(
             if (WatchRelay.appRunning) S_OK else S_WARN,
-            if (WatchRelay.appRunning) "open, receiving" else "not confirmed open")
+            when {
+                !WatchRelay.appRunning -> "no ack — not open"
+                WatchRelay.lastRoundTripMs >= 0 -> "acking, ${WatchRelay.lastRoundTripMs} ms"
+                else -> "open"
+            })
         rowNotif.set(
             when {
                 Status.listenerBound -> S_OK
@@ -346,6 +355,9 @@ class MainActivity : Activity() {
             appendLine("osmand notifs   ${Status.osmandNotifsSeen}")
             appendLine("last turn       ${Status.lastTurnType}")
             appendLine("last send       ${WatchRelay.lastSent}")
+            appendLine("round trip      ${
+                if (WatchRelay.lastRoundTripMs >= 0) "${WatchRelay.lastRoundTripMs} ms" else "-"
+            }")
             if (WatchRelay.notReady.isNotEmpty()) {
                 appendLine("send refused    ${WatchRelay.notReady}")
             }
