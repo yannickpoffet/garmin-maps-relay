@@ -1,3 +1,14 @@
+## v0.16 — tell the truth about the unbound listener
+
+v0.15 offered a "Retry" that called `requestRebind`. That is the
+documented cure for a listener left enabled-but-unbound after an app
+update, it is already called on every launch, and on this phone it does
+not take — the service stays unbound either way.
+
+What does work is toggling the grant off and on. So the button now opens
+notification-access settings and says to do exactly that, rather than
+offering a retry that quietly achieves nothing.
+
 ## v0.15 — the screen no longer contradicts itself
 
 Two bugs visible in the first screenshot of the new layout.

@@ -260,10 +260,17 @@ class MainActivity : Activity() {
                 }
             } else {
                 Verdict(amber, "Notification service not started",
-                    "Access is granted but Android has not started the " +
-                    "listener — it does this after the app is replaced. " +
-                    "Turns still reach the watch.",
-                    "Retry") { requestListenerRebind(); render() }
+                    "Android leaves the listener enabled but not running " +
+                    "after the app is updated. Turn notification access OFF " +
+                    "and ON again for Maps Relay to restart it. " +
+                    "Turns still reach the watch meanwhile.",
+                    "Open settings") {
+                    // requestRebind is the documented cure and is called on
+                    // every launch, but on this phone it simply does not take.
+                    // Toggling the grant does, so send them where they can.
+                    requestListenerRebind()
+                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                }
             }
         }
         if (!Status.navActive) {
