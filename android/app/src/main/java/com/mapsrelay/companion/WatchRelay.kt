@@ -133,6 +133,38 @@ object WatchRelay {
         })
     }
 
+    /**
+     * Deliberate, full retry of the watch link, for the button that says so.
+     *
+     * `start()` alone was a no-op here: it returns early whenever the SDK is
+     * already initialised, which is nearly always, so the button promised a
+     * reconnection and delivered nothing unless Garmin Connect had shut the
+     * SDK down. This drops the current pick and builds it again from
+     * knownDevices, which is the part a wedged link actually needs.
+     */
+    fun reconnect(context: Context) {
+        val instance = ciq
+        if (instance == null || !sdkReady) {
+            start(context)
+            return
+        }
+        val old = device
+        if (old != null) {
+            // Re-registering without this stacks a second listener for the
+            // same device inside the SDK.
+            try {
+                instance.unregisterForDeviceEvents(old)
+            } catch (e: Exception) {
+                Log.w(TAG, "unregisterForDeviceEvents failed", e)
+            }
+        }
+        device = null
+        registeredFor = -1L
+        appRunning = false
+        setStatus("re-picking watch")
+        pickDevice(instance)
+    }
+
     private fun pickDevice(instance: ConnectIQ) {
         // Calling knownDevices before onSdkReady throws, and the catch below
         // would then overwrite a perfectly good status line with "SDK not

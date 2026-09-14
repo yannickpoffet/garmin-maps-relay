@@ -1,3 +1,21 @@
+## v0.21 — the reconnect button now reconnects
+
+It called `WatchRelay.start()`, which opens with `if (ciq != null) return`
+— and the SDK is initialised at launch, so the watch half of "reconnect
+watch and osmand" returned immediately and did nothing at all. It only
+ever helped in one case, after Garmin Connect had shut the SDK down.
+Notably it never re-picked the watch, which is the one thing you press a
+reconnect button for.
+
+`WatchRelay.reconnect()` drops the current pick and rebuilds it from
+`knownDevices`, unregistering the old device-event listener first so a
+second one does not stack inside the SDK, then re-queries the live
+status. The OsmAnd half already did something real — it retries a
+refused subscription, which is how the app recovers after you enable it
+in OsmAnd's plugin list.
+
+Both the actions-list button and the NO WATCH fix button use it.
+
 ## v0.20 — "waiting" instead of three em-dashes
 
 While OsmAnd is still calculating a route there is nothing to show yet,

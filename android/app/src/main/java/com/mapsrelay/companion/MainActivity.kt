@@ -183,7 +183,9 @@ class MainActivity : Activity() {
                 render()
             })
             addView(action("reconnect watch and osmand") {
-                WatchRelay.start(applicationContext); OsmAndLink.bind(force = true); render()
+                WatchRelay.reconnect(applicationContext)
+                OsmAndLink.bind(force = true)
+                render()
             })
         }, gap())
 
@@ -245,7 +247,7 @@ class MainActivity : Activity() {
                     "no watch paired in garmin connect"
                 else "${WatchRelay.deviceName} is paired but out of range.\n" +
                      "check bluetooth and that garmin connect is running",
-                "reconnect") { WatchRelay.start(applicationContext); render() }
+                "reconnect") { WatchRelay.reconnect(applicationContext); render() }
         }
         if (Status.navActive && !WatchRelay.appRunning) {
             return Verdict(S_WARN, "APP CLOSED",
