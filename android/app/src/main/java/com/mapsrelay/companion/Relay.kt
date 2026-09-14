@@ -93,9 +93,6 @@ object Relay {
         Status.turnsReceived++
         Status.lastTurnType = "${info.turnType} -> $maneuver @ ${meters}m"
         Status.navActive = true
-        // The counters move on every turn, not only on the ones that make it
-        // onto the link, and the screen should say so as they do.
-        onUpdate?.invoke()
 
         // Everything else about the trip, typed, straight from OsmAnd. This is
         // the call that made the notification parser redundant: street name,
@@ -117,8 +114,21 @@ object Relay {
         val dm = if (maneuver == Maneuver.OFF_ROUTE) -1 else meters
         val text = distanceText(dm)
 
+        // What the phone displays is what the phone knows, updated here.
+        //
+        // These used to be set inside flush(), after WatchRelay accepted the
+        // payload — so the phone's own screen was gated by the BLE link and
+        // sat a round trip behind, 0.7-1.6s, for no reason. The watch has to
+        // wait for the link. This screen does not.
+        Status.street = street
+        Status.distance = text
+        Status.eta = clockOf(trip?.arrivalTime ?: 0L)
+        Status.remaining = distanceText(trip?.leftDistance ?: -1)
+        Status.maneuver = maneuver
+
         synchronized(lock) {
             if (maneuver == lastManeuver && street == lastStreet && dm == lastMeters) {
+                onUpdate?.invoke()
                 return
             }
             lastManeuver = maneuver
@@ -126,6 +136,7 @@ object Relay {
             lastMeters = dm
             pending = payloadOf(maneuver, dm, text, street, trip)
         }
+        onUpdate?.invoke()
         flush()
     }
 
@@ -143,13 +154,10 @@ object Relay {
             // Only clear it if nothing newer arrived while we were sending.
             if (pending === p) pending = null
         }
+        // Only the send counters belong here. The instruction itself is
+        // recorded when it is known, not when the link deigns to take it.
         Status.lastPayload = p.toString()
         Status.sentCount++
-        Status.street = p["s"] as? String ?: ""
-        Status.distance = p["d"] as? String ?: ""
-        Status.eta = p["e"] as? String ?: ""
-        Status.remaining = p["r"] as? String ?: ""
-        Status.maneuver = p["m"] as? Int ?: Maneuver.UNKNOWN
         onUpdate?.invoke()
     }
 

@@ -1,3 +1,18 @@
+## v0.26 — the phone display was waiting on the watch
+
+v0.25 fixed the wrong layer. The real cause: `Status.street`,
+`distance`, `eta` and the rest were assigned inside `flush()`, *after*
+`WatchRelay.send()` accepted the payload. When the link is busy waiting
+for an ack — which at a 0.7–1.6 s round trip is most of the time —
+`flush()` returns early and those fields are never written.
+
+So the phone was showing the instruction at the *watch's* rate rather
+than at the rate it knew it. The screen was gated by Bluetooth.
+
+The instruction is now recorded where it becomes known, in
+`onDirection`, and only the send counters are left in `flush()`. The
+watch has to wait for the link; this screen does not.
+
 ## v0.25 — the screen was a second behind its own data
 
 The instruction on the phone lagged the instruction on the wire by up to
