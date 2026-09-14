@@ -148,17 +148,54 @@ object Relay {
      * from the status screen's tick as a backstop.
      */
     fun flush() {
-        val p = synchronized(lock) { pending } ?: return
+        val queued = synchronized(lock) { pending } ?: return
+
+        // Top the payload up with the newest numbers OsmAnd has, at the moment
+        // of transmission rather than the moment of queueing.
+        //
+        // This is where the remaining staleness lived. A payload waits for the
+        // link, and the link takes 0.7-1.6s, so a distance measured when the
+        // payload was built is already old by the time it leaves. OsmAnd will
+        // answer with the current one for the asking, and the difference is
+        // most of a second on every single update.
+        val p = refreshed(queued)
+
         if (!WatchRelay.send(p)) return
         synchronized(lock) {
             // Only clear it if nothing newer arrived while we were sending.
-            if (pending === p) pending = null
+            if (pending === queued) pending = null
         }
         // Only the send counters belong here. The instruction itself is
         // recorded when it is known, not when the link deigns to take it.
         Status.lastPayload = p.toString()
         Status.sentCount++
         onUpdate?.invoke()
+    }
+
+    /** The queued payload with its distances and ETA brought up to date. */
+    private fun refreshed(p: Map<String, Any>): Map<String, Any> {
+        val trip = OsmAndLink.trip() ?: return p
+        val m = p["m"] as? Int ?: return p
+        // Off route has no distance to a turn, and arrival is about to be
+        // superseded anyway; leave both exactly as they were queued.
+        if (m == Maneuver.OFF_ROUTE || m == Maneuver.ARRIVE) return p
+        val dm = trip.nextDistance
+        if (dm < 0) return p
+
+        val text = distanceText(dm)
+        // Keep the dedupe honest: "already sent" has to mean the value that
+        // actually went, not the one that was queued.
+        synchronized(lock) { lastMeters = dm }
+        Status.distance = text
+        Status.remaining = distanceText(trip.leftDistance)
+        Status.eta = clockOf(trip.arrivalTime)
+
+        return p + mapOf(
+            "dm" to dm,
+            "d" to text,
+            "r" to distanceText(trip.leftDistance),
+            "e" to clockOf(trip.arrivalTime),
+        )
     }
 
     private fun payloadOf(m: Int, dm: Int, text: String, street: String,

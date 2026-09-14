@@ -1,3 +1,24 @@
+## v0.27 — send the distance as it is now, not as it was when queued
+
+A review of the whole path for staleness, rather than another symptom fix.
+
+**The payload was built when it was queued and sent up to a round trip
+later.** With the link at 0.7–1.6 s, a distance measured at queue time is
+already most of a second old before it leaves the phone — on every
+update, not occasionally. OsmAnd will give the current distance to the
+next turn for the asking (`next_turn_distance` in its turn bundle), so
+the payload is now topped up with the live distance, remaining distance
+and ETA at the moment of transmission. Off-route and arrival are left
+exactly as queued, since neither has a meaningful distance to refresh.
+
+**The ack timeout is derived from the measured round trip** — three
+times the last one, floored at 800 ms and capped at the old 2.5 s.
+A flat 2.5 s punished a fast link: at 700 ms a single lost ack bought
+three and a half round trips of silence.
+
+**A send error no longer outlives the condition.** `last error` kept
+showing a failure after the link had visibly recovered; an ack clears it.
+
 ## v0.26 — the phone display was waiting on the watch
 
 v0.25 fixed the wrong layer. The real cause: `Status.street`,

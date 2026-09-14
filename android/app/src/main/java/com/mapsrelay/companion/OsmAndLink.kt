@@ -95,6 +95,10 @@ object OsmAndLink {
         val arrivalTime: Long,
         /** Turn angle of the next maneuver, degrees. */
         val nextAngle: Int,
+        /** Metres to the next maneuver, as OsmAnd has it *now*. The same
+         *  quantity the AIDL callback delivers, available on demand — which is
+         *  what lets a queued payload be refreshed just before it is sent. */
+        val nextDistance: Int,
         /** The turn *after* the next one — nothing else on this watch can show
          *  you that a second turn follows immediately. */
         val afterManeuver: Int,
@@ -127,6 +131,7 @@ object OsmAndLink {
             leftTime = info.leftTime,
             arrivalTime = info.arrivalTime,
             nextAngle = (t?.getFloat("next_turn_angle") ?: 0f).toInt(),
+            nextDistance = t?.getInt("next_turn_distance") ?: -1,
             afterManeuver = Maneuver.fromTurnXml(t?.getString("after_nextturn_type")),
             afterDistance = t?.getInt("after_nextturn_distance") ?: -1,
             afterStreet = t?.getString("after_nextturn_name").orEmpty(),

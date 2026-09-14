@@ -60,6 +60,21 @@ object WatchRelay {
     private const val ACK_TIMEOUT_MS = 2500L
 
     /**
+     * Ack timeout, derived from what the link has actually been measured at
+     * rather than fixed in advance.
+     *
+     * A flat 2.5 s punishes a fast link: at a 700 ms round trip a single lost
+     * ack costs three and a half round trips of silence. Three times the last
+     * measured trip is generous enough not to fire on ordinary jitter, and the
+     * floor and ceiling keep one freak sample from wedging or spamming it.
+     */
+    private fun ackTimeout(): Long {
+        val rtt = lastRoundTripMs
+        if (rtt <= 0) return ACK_TIMEOUT_MS
+        return (rtt * 3).coerceIn(800L, ACK_TIMEOUT_MS)
+    }
+
+    /**
      * Spacing to fall back on while the watch has never acknowledged anything.
      *
      * Without this the handshake punishes its own failure: no acks means every
@@ -294,6 +309,9 @@ object WatchRelay {
 
                 everAcked = true
                 appRunning = true
+                // The link is demonstrably working; an old failure message
+                // sitting on the status screen is now just misinformation.
+                if (Status.lastError.startsWith("send:")) Status.lastError = "-"
                 lastAckAt = now
                 // Ignore a late ack for a payload already given up on; it
                 // would otherwise credit the wrong round trip and open the
@@ -426,7 +444,7 @@ object WatchRelay {
         // passed that no ack is coming.
         val started = System.currentTimeMillis()
         val busy = inFlightSince
-        val wait = if (everAcked) ACK_TIMEOUT_MS else NO_ACK_INTERVAL_MS
+        val wait = if (everAcked) ackTimeout() else NO_ACK_INTERVAL_MS
         if (busy != 0L && started - busy < wait) {
             notReady = if (everAcked) "waiting for watch ack" else "pacing (no acks yet)"
             return false
