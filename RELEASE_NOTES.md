@@ -1,3 +1,20 @@
+## v0.19 — a running OsmAnd is not a running route
+
+The watch app is meant to open by itself when navigation starts, and it
+was opening whenever OsmAnd merely launched.
+
+The check was "is there an ongoing OsmAnd notification". OsmAnd posts
+one whenever it is alive at all — its background service uses the same
+channel as the navigation one — so the answer was yes long before any
+route existed. The same mistake left the phone claiming to be
+navigating when it was not, which is why the instruction card sat there
+full of em-dashes.
+
+`getAppInfo()` knows the truth, so route start and route end are now
+decided by whether a route is actually calculated and has distance left,
+not by a notification being present. A route that ends without its
+notification disappearing is now noticed too.
+
 ## v0.18 — "NO WATCH" while the watch was right there
 
 v0.17 read `IQDevice.status` to decide whether the watch was reachable.

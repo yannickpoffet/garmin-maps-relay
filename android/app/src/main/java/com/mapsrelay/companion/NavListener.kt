@@ -70,27 +70,45 @@ class NavListener : NotificationListenerService() {
         // OsmAnd is demonstrably alive and navigating. If the AIDL link is not
         // up -- installed late, updated, force-stopped -- retry it here.
         OsmAndLink.bind()
+        // An ongoing OsmAnd notification does NOT mean a route is running.
+        // OsmAnd posts one whenever it is alive at all -- its background
+        // service uses the same channel -- so treating any of them as "route
+        // started" opened the watch app whenever OsmAnd launched, and left
+        // the phone claiming to be navigating when it was not.
+        //
+        // getAppInfo knows the truth: no route calculated, no distance left.
+        val routing = (OsmAndLink.trip()?.leftDistance ?: 0) > 0
+        if (!routing) {
+            if (routeRunning) endRoute()
+            return
+        }
+
         Status.navActive = true
         startRelayForeground()
 
-        // A route just started. Open the watch app now, once: it has to be
+        // A route has actually started. Open the watch app once: it has to be
         // running for Garmin to deliver anything to it, and this is the one
-        // moment when doing it unprompted is obviously right. v0.12 called
-        // this on every failed send instead, which on this watch means a
-        // prompt on the wrist, over and over, mid-drive.
+        // moment when doing that unprompted is obviously right. v0.12 called
+        // it on every failed send instead, which on this watch means a prompt
+        // on the wrist, over and over, mid-drive.
         if (!routeRunning) {
             routeRunning = true
             WatchRelay.openOnWatch(force = true)
         }
     }
 
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        if (!isOsmAndNavigation(sbn)) return
-        // Navigation ended. The watch falls back to its stale display on its own.
+    /** Route finished, whether or not the notification went away with it. */
+    private fun endRoute() {
         stopRelayForeground()
         Relay.reset()
         routeRunning = false
         Status.navActive = false
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        if (!isOsmAndNavigation(sbn)) return
+        // Navigation ended. The watch falls back to its stale display on its own.
+        endRoute()
     }
 
     /** OsmAnd's ongoing navigation notification — used as a route-is-running
