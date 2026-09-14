@@ -29,6 +29,16 @@ object Relay {
     /** Guards the dedupe state and the single pending slot. */
     private val lock = Any()
 
+    /**
+     * Set by the status screen so a new instruction repaints immediately.
+     *
+     * Without it the only repaints were the once-a-second tick and whatever
+     * WatchRelay happened to notify, so the instruction on screen lagged the
+     * instruction on the wire by up to a second for no reason at all — the
+     * data was already there, nothing had asked to see it.
+     */
+    @Volatile var onUpdate: (() -> Unit)? = null
+
     /** The newest payload not yet accepted by the link, or null. One slot on
      *  purpose: a superseded payload has no value, and sending it would move
      *  the watch backwards. */
@@ -83,6 +93,9 @@ object Relay {
         Status.turnsReceived++
         Status.lastTurnType = "${info.turnType} -> $maneuver @ ${meters}m"
         Status.navActive = true
+        // The counters move on every turn, not only on the ones that make it
+        // onto the link, and the screen should say so as they do.
+        onUpdate?.invoke()
 
         // Everything else about the trip, typed, straight from OsmAnd. This is
         // the call that made the notification parser redundant: street name,
@@ -137,6 +150,7 @@ object Relay {
         Status.eta = p["e"] as? String ?: ""
         Status.remaining = p["r"] as? String ?: ""
         Status.maneuver = p["m"] as? Int ?: Maneuver.UNKNOWN
+        onUpdate?.invoke()
     }
 
     private fun payloadOf(m: Int, dm: Int, text: String, street: String,

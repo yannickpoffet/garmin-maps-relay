@@ -210,6 +210,8 @@ class MainActivity : Activity() {
         WatchRelay.onStatusChange = { ui.post { render() } }
         WatchRelay.start(applicationContext)
         OsmAndLink.onStatusChange = { ui.post { render() } }
+        // Repaint the moment an instruction changes, rather than on the tick.
+        Relay.onUpdate = { ui.post { render() } }
         OsmAndLink.start(applicationContext)
     }
 

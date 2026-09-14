@@ -1,3 +1,18 @@
+## v0.25 — the screen was a second behind its own data
+
+The instruction on the phone lagged the instruction on the wire by up to
+a second. Nothing was slow: `Relay` updated the fields and never told
+the screen, so the only repaints were the once-a-second tick and
+whatever `WatchRelay` happened to notify about. The data was already
+there; nothing had asked to see it.
+
+`Relay` now notifies on every update — both when a payload goes out and
+when a turn arrives, since the counters move on turns that never reach
+the link — and the screen repaints on that instead of waiting.
+
+This is the phone display only. The watch is unaffected: its pacing is
+the 0.7–1.6 s round trip through Garmin Connect, which is the ceiling.
+
 ## v0.24 — the watch was being shown distances it had already passed
 
 Acks work now, and the live log showed the next problem plainly:
