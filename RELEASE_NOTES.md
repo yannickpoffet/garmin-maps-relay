@@ -1,3 +1,19 @@
+## v0.15 — the screen no longer contradicts itself
+
+Two bugs visible in the first screenshot of the new layout.
+
+- **A red dot under a green verdict.** The banner tested whether
+  notification access was granted; the row tested whether the service
+  had actually bound. Both now report on the binding, which is the thing
+  that matters, and the two faults that look identical are separated:
+  never granted, versus granted and then left unbound by Android after
+  the app was replaced. Each says so, and offers a different fix.
+- **"CURRENT INSTRUCTION" hung over nothing** when no route was
+  running — the card was hidden and its heading was not.
+
+Connection dots gained a third state, so "granted, waiting for Android"
+reads as amber rather than as a hard failure.
+
 ## v0.14 — say what is wrong, and open the watch when a route starts
 
 The status screen printed every counter it had as a monospace block and

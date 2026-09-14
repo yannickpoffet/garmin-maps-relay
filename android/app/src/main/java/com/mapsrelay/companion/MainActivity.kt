@@ -51,6 +51,7 @@ class MainActivity : Activity() {
     private lateinit var connWatch: StatusRow
     private lateinit var connNotif: StatusRow
 
+    private lateinit var instructionLabel: TextView
     private lateinit var instructionCard: LinearLayout
     private lateinit var instrTurn: TextView
     private lateinit var instrStreet: TextView
@@ -140,7 +141,8 @@ class MainActivity : Activity() {
         root.addView(conns, cardParams())
 
         // ---------------------------------------------- the live instruction
-        root.addView(sectionLabel("CURRENT INSTRUCTION"))
+        instructionLabel = sectionLabel("CURRENT INSTRUCTION")
+        root.addView(instructionLabel)
         instructionCard = cardView()
         instrTurn = TextView(this).apply {
             textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(ink)
@@ -243,12 +245,25 @@ class MainActivity : Activity() {
                 "Open Maps Relay on the watch.",
                 "Open on watch") { WatchRelay.openOnWatch(force = true); render() }
         }
-        if (!notificationAccessGranted()) {
-            return Verdict(amber, "Working, but killable",
-                "Without notification access the relay cannot stay in the " +
-                "foreground, so Android may stop it mid-route. Turns still work.",
-                "Grant access") {
-                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        if (!Status.listenerBound) {
+            // Two different faults wear the same face here, and they need
+            // different fixes: never granted, versus granted and then left
+            // unbound by Android after the app was replaced.
+            return if (!notificationAccessGranted()) {
+                Verdict(amber, "Working, but killable",
+                    "Without notification access the relay cannot hold the " +
+                    "foreground, so Android may stop it mid-route, and it " +
+                    "will not wake by itself when you start navigating. " +
+                    "Turns still reach the watch while this screen is open.",
+                    "Grant access") {
+                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                }
+            } else {
+                Verdict(amber, "Notification service not started",
+                    "Access is granted but Android has not started the " +
+                    "listener — it does this after the app is replaced. " +
+                    "Turns still reach the watch.",
+                    "Retry") { requestListenerRebind(); render() }
             }
         }
         if (!Status.navActive) {
@@ -271,14 +286,28 @@ class MainActivity : Activity() {
             fixButton.visibility = View.GONE
         }
 
-        connOsmand.set(OsmAndLink.bound && !OsmAndLink.status.startsWith("NOT ENABLED"),
+        connOsmand.set(
+            if (OsmAndLink.bound && !OsmAndLink.status.startsWith("NOT ENABLED")) good else bad,
             OsmAndLink.status)
-        connWatch.set(!WatchRelay.status.startsWith("init failed") &&
-            !WatchRelay.status.contains("no watch"), WatchRelay.status)
-        connNotif.set(Status.listenerBound,
-            if (Status.listenerBound) "bound" else "not bound — relay is killable")
+        connWatch.set(
+            if (!WatchRelay.status.startsWith("init failed") &&
+                !WatchRelay.status.contains("no watch")) good else bad,
+            WatchRelay.status)
+        connNotif.set(
+            when {
+                Status.listenerBound -> good
+                notificationAccessGranted() -> amber
+                else -> bad
+            },
+            when {
+                Status.listenerBound -> "bound"
+                notificationAccessGranted() -> "granted, waiting for Android"
+                else -> "not granted"
+            })
 
-        instructionCard.visibility = if (Status.navActive) View.VISIBLE else View.GONE
+        val showing = if (Status.navActive) View.VISIBLE else View.GONE
+        instructionCard.visibility = showing
+        instructionLabel.visibility = showing
         instrTurn.text = "${Maneuver.name(Status.maneuver)}  ${Status.distance}".trim()
         instrStreet.text = Status.street.ifEmpty { "—" }
         instrTrip.text = listOf(Status.remaining, Status.eta)
@@ -350,17 +379,14 @@ class MainActivity : Activity() {
         private val value = TextView(a).apply {
             textSize = 13f; setTextColor(a.inkSoft); gravity = Gravity.END
         }
-        private val okColour = a.good
-        private val badColour = a.bad
-
         init {
             view.addView(dot)
             view.addView(name)
             view.addView(value, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         }
 
-        fun set(ok: Boolean, text: String) {
-            dot.setTextColor(if (ok) okColour else badColour)
+        fun set(colour: Int, text: String) {
+            dot.setTextColor(colour)
             value.text = text
         }
     }
