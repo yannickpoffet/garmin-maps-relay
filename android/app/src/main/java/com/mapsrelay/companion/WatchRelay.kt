@@ -63,6 +63,22 @@ object WatchRelay {
     @Volatile var notReady: String = ""
         private set
 
+    /** Is a watch paired and in range? Distinct from whether our app is
+     *  running on it — the free-text `status` conflated the two, and they
+     *  need completely different things done about them. */
+    @Volatile var deviceConnected: Boolean = false
+        private set
+
+    /** Friendly name of the picked watch, or "" when there is none. */
+    @Volatile var deviceName: String = ""
+        private set
+
+    /** Whether the watch *app* took our last message. Garmin only delivers to
+     *  a Connect IQ app that is running, so a SUCCESS is the one piece of
+     *  positive evidence that it is open. */
+    @Volatile var appRunning: Boolean = false
+        private set
+
     /** Set by the UI so it can repaint when status changes. */
     @Volatile var onStatusChange: (() -> Unit)? = null
 
@@ -100,6 +116,8 @@ object WatchRelay {
             }
 
             override fun onSdkShutDown() {
+                deviceConnected = false
+                appRunning = false
                 // Drop everything, so the next start() genuinely re-initialises
                 // rather than handing back a shut-down instance.
                 sdkReady = false
@@ -125,6 +143,8 @@ object WatchRelay {
         }
 
         if (known.isEmpty()) {
+            deviceConnected = false
+            deviceName = ""
             setStatus("no watch paired in Garmin Connect")
             return
         }
@@ -137,17 +157,28 @@ object WatchRelay {
             instance.registerForDeviceEvents(d) { dev, st ->
                 // friendlyName comes back empty sometimes, which rendered the
                 // status line as a bare ": CONNECTED".
-                setStatus("${nameOf(dev)}: $st")
+                deviceName = nameOf(dev)
+                deviceConnected = (st == IQDevice.IQDeviceStatus.CONNECTED)
+                setStatus("$deviceName: $st")
                 // Forget a device that has gone away so the next send re-picks
                 // rather than firing into a dead handle.
-                if (st != IQDevice.IQDeviceStatus.CONNECTED) {
+                if (!deviceConnected) {
                     device = null
+                    appRunning = false
                 }
             }
         } catch (e: Exception) {
             Log.w(TAG, "registerForDeviceEvents failed", e)
         }
-        setStatus(nameOf(d))
+        deviceName = nameOf(d)
+        // knownDevices lists pairings, not live links; take the device's own
+        // word for whether it is actually reachable right now.
+        deviceConnected = try {
+            d.status == IQDevice.IQDeviceStatus.CONNECTED
+        } catch (e: Exception) {
+            false
+        }
+        setStatus(deviceName)
     }
 
     private fun nameOf(d: IQDevice): String {
@@ -237,7 +268,8 @@ object WatchRelay {
             instance.sendMessage(d, a, payload) { _, _, sendStatus ->
                 inFlightSince = 0L
                 lastSent = "$sendStatus @ ${System.currentTimeMillis() / 1000}"
-                if (sendStatus != ConnectIQ.IQMessageStatus.SUCCESS) {
+                appRunning = (sendStatus == ConnectIQ.IQMessageStatus.SUCCESS)
+                if (!appRunning) {
                     Status.lastError = "send: $sendStatus"
                 }
                 Log.i(TAG, "send -> $sendStatus  $payload")

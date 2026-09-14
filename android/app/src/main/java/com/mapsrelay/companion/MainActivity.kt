@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -13,7 +12,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.text.TextUtils
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -22,175 +20,183 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.mapsrelay.companion.Ui.ACCENT
+import com.mapsrelay.companion.Ui.BG
+import com.mapsrelay.companion.Ui.DIM
+import com.mapsrelay.companion.Ui.LINE
+import com.mapsrelay.companion.Ui.ON_ACCENT
+import com.mapsrelay.companion.Ui.S_BAD
+import com.mapsrelay.companion.Ui.S_OFF
+import com.mapsrelay.companion.Ui.S_OK
+import com.mapsrelay.companion.Ui.S_WARN
+import com.mapsrelay.companion.Ui.SURFACE
+import com.mapsrelay.companion.Ui.SURFACE2
+import com.mapsrelay.companion.Ui.TEXT
+import com.mapsrelay.companion.Ui.col
 
 /**
  * Status and setup screen.
  *
- * The previous version printed every counter it had as a monospace block and
- * left you to work out which line mattered. That is exactly backwards: nearly
- * always there is one thing wrong, and the screen's job is to name it.
+ * It used to print every counter it had and leave you to work out which line
+ * mattered. There is nearly always exactly one thing wrong, so the top of the
+ * screen is a single verdict with the button that fixes it, and the detail
+ * lives underneath for when that is not enough.
  *
- * So the top of the screen is a single verdict — working, or not, and why —
- * computed from the pieces, with the button that fixes it right underneath.
- * The detail is still all there, below, for when the verdict is not enough.
- *
- * Styling follows OsmAnd, since that is the app this one lives beside: its
- * amber (taken from the colour its own notification carries, 0xFFFF8F00) on a
- * light grey ground, in cards.
+ * The watch gets a pill in the header that is visible from every scroll
+ * position, because "is the watch actually connected" is the question this
+ * screen is opened to answer. It separates two states the old free-text status
+ * ran together: the watch being out of range, and the watch being right there
+ * with our app closed on it. Those need entirely different things done.
  */
 class MainActivity : Activity() {
 
     private val ui = Handler(Looper.getMainLooper())
 
-    private lateinit var bannerCard: LinearLayout
-    private lateinit var bannerTitle: TextView
-    private lateinit var bannerDetail: TextView
-    private lateinit var fixButton: Button
+    private lateinit var watchPill: TextView
+    private lateinit var heroCard: LinearLayout
+    private lateinit var heroWord: TextView
+    private lateinit var heroSub: TextView
+    private lateinit var heroFix: Button
 
-    private lateinit var connOsmand: StatusRow
-    private lateinit var connWatch: StatusRow
-    private lateinit var connNotif: StatusRow
+    private lateinit var rowOsmand: Row
+    private lateinit var rowWatch: Row
+    private lateinit var rowApp: Row
+    private lateinit var rowNotif: Row
 
-    private lateinit var instructionLabel: TextView
-    private lateinit var instructionCard: LinearLayout
+    private lateinit var instrLabel: TextView
+    private lateinit var instrCard: LinearLayout
     private lateinit var instrTurn: TextView
     private lateinit var instrStreet: TextView
     private lateinit var instrTrip: TextView
 
     private lateinit var detail: TextView
 
+    private fun dpi(v: Float) = Ui.dpi(this, v)
+
     private val refresh = object : Runnable {
         override fun run() {
-            // Enabling us inside OsmAnd sends no signal back, and this screen
-            // is where you are standing when you do it. bind() throttles
-            // internally, so calling it once a second costs nothing.
+            // Enabling us inside OsmAnd sends no signal back, and this screen is
+            // where you are standing when you do it. bind() throttles itself.
             OsmAndLink.bind()
             render()
             ui.postDelayed(this, 1000)
         }
     }
 
-    // ----------------------------------------------------------------- theme
-
-    private val bg = Color.parseColor("#F2F2F5")
-    private val card = Color.WHITE
-    private val ink = Color.parseColor("#1A1A1A")
-    private val inkSoft = Color.parseColor("#6E6E73")
-    private val amber = Color.parseColor("#FF8F00")   // OsmAnd's own
-    private val good = Color.parseColor("#2E7D32")
-    private val bad = Color.parseColor("#C62828")
-    private val idle = Color.parseColor("#78909C")
-
-    private fun dp(v: Int) = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics
-    ).toInt()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(bg)
-            setPadding(dp(16), dp(16), dp(16), dp(24))
+            setBackgroundColor(col(BG))
+            setPadding(dpi(16f), dpi(18f), dpi(16f), dpi(24f))
         }
 
-        root.addView(TextView(this).apply {
-            text = "Maps Relay"
-            setTextColor(ink)
-            textSize = 26f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(4), 0, 0, dp(4))
+        // header -----------------------------------------------------------
+        watchPill = Ui.pill(this, "WATCH ?", S_OFF)
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(Ui.condensed(this@MainActivity, "MAPS RELAY", 22f, TEXT),
+                LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(watchPill)
         })
-        root.addView(TextView(this).apply {
-            text = "OsmAnd → Forerunner 745"
-            setTextColor(inkSoft)
-            textSize = 13f
-            setPadding(dp(4), 0, 0, dp(16))
+        root.addView(Ui.mono(this, "osmand → forerunner 745", 11.5f, DIM).apply {
+            setPadding(0, dpi(2f), 0, dpi(16f))
         })
 
-        // ------------------------------------------------------- the verdict
-        bannerCard = cardView()
-        bannerTitle = TextView(this).apply {
-            textSize = 20f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+        // verdict ----------------------------------------------------------
+        heroWord = Ui.condensed(this, "—", 34f, TEXT).apply { gravity = Gravity.CENTER }
+        heroSub = Ui.mono(this, "", 12.5f, DIM).apply {
+            gravity = Gravity.CENTER
+            setPadding(dpi(4f), dpi(6f), dpi(4f), 0)
         }
-        bannerDetail = TextView(this).apply {
-            textSize = 14f
-            setTextColor(Color.WHITE)
-            setPadding(0, dp(4), 0, 0)
-        }
-        fixButton = Button(this).apply {
+        heroFix = Button(this).apply {
             visibility = View.GONE
-        }
-        bannerCard.addView(bannerTitle)
-        bannerCard.addView(bannerDetail)
-        bannerCard.addView(fixButton, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-            .apply { topMargin = dp(10) })
-        root.addView(bannerCard, cardParams())
-
-        // --------------------------------------------------- what's connected
-        root.addView(sectionLabel("CONNECTIONS"))
-        val conns = cardView().apply { setBackgroundColor(card) }
-        connOsmand = StatusRow(this, "OsmAnd")
-        connWatch = StatusRow(this, "Watch")
-        connNotif = StatusRow(this, "Notification access")
-        conns.addView(connOsmand.view)
-        conns.addView(connNotif.view)
-        conns.addView(connWatch.view)
-        root.addView(conns, cardParams())
-
-        // ---------------------------------------------- the live instruction
-        instructionLabel = sectionLabel("CURRENT INSTRUCTION")
-        root.addView(instructionLabel)
-        instructionCard = cardView()
-        instrTurn = TextView(this).apply {
-            textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(ink)
-        }
-        instrStreet = TextView(this).apply {
-            textSize = 15f; setTextColor(inkSoft); setPadding(0, dp(2), 0, 0)
-        }
-        instrTrip = TextView(this).apply {
-            textSize = 13f; setTextColor(amber); setPadding(0, dp(8), 0, 0)
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        instructionCard.addView(instrTurn)
-        instructionCard.addView(instrStreet)
-        instructionCard.addView(instrTrip)
-        root.addView(instructionCard, cardParams())
-
-        // ------------------------------------------------------------ actions
-        root.addView(sectionLabel("ACTIONS"))
-        val actions = cardView()
-        actions.addView(flatButton("Open Maps Relay on watch") {
-            WatchRelay.openOnWatch(force = true); render()
-        })
-        actions.addView(flatButton("Send test message") {
-            val ok = WatchRelay.send(
-                mapOf("m" to Maneuver.RIGHT, "d" to "200 m", "dm" to 200,
-                      "s" to "Test from phone", "e" to "--:--", "r" to "")
-            )
-            if (!ok) toast("not sent — ${WatchRelay.notReady.ifEmpty { "see status" }}")
-            render()
-        })
-        actions.addView(flatButton("Reconnect watch and OsmAnd") {
-            WatchRelay.start(applicationContext); OsmAndLink.bind(force = true); render()
-        })
-        root.addView(actions, cardParams())
-
-        // ------------------------------------------------------------- detail
-        root.addView(sectionLabel("DETAIL"))
-        detail = TextView(this).apply {
+            isAllCaps = true
+            textSize = 12f
+            letterSpacing = 0.06f
             typeface = Typeface.MONOSPACE
-            textSize = 11f
-            setTextColor(inkSoft)
+            setTextColor(col(ON_ACCENT))
+            background = GradientDrawable().apply {
+                setColor(col(ACCENT)); cornerRadius = Ui.dp(this@MainActivity, 999f)
+            }
+            stateListAnimator = null
         }
-        val detailCard = cardView().apply { addView(detail) }
-        root.addView(detailCard, cardParams())
+        heroCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.cardBg(this@MainActivity)
+            setPadding(dpi(20f), dpi(20f), dpi(20f), dpi(18f))
+            addView(Ui.label(this@MainActivity, "STATUS").apply { gravity = Gravity.CENTER })
+            addView(heroWord)
+            addView(heroSub)
+            addView(heroFix, LinearLayout.LayoutParams(MATCH_PARENT, dpi(44f))
+                .apply { topMargin = dpi(14f) })
+        }
+        root.addView(heroCard, gap())
+
+        // connections ------------------------------------------------------
+        root.addView(Ui.label(this, "CONNECTIONS").apply { setPadding(dpi(4f), 0, 0, dpi(6f)) })
+        rowOsmand = Row(this, "osmand")
+        rowWatch = Row(this, "watch link")
+        rowApp = Row(this, "watch app")
+        rowNotif = Row(this, "notifications")
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.cardBg(this@MainActivity)
+            setPadding(dpi(16f), dpi(10f), dpi(16f), dpi(10f))
+            addView(rowOsmand.view); addView(rowWatch.view)
+            addView(rowApp.view); addView(rowNotif.view)
+        }, gap())
+
+        // live instruction --------------------------------------------------
+        instrLabel = Ui.label(this, "CURRENT INSTRUCTION")
+            .apply { setPadding(dpi(4f), 0, 0, dpi(6f)) }
+        root.addView(instrLabel)
+        instrTurn = Ui.condensed(this, "—", 26f, TEXT)
+        instrStreet = Ui.mono(this, "", 13f, DIM).apply { setPadding(0, dpi(2f), 0, 0) }
+        instrTrip = Ui.mono(this, "", 12.5f, ACCENT).apply { setPadding(0, dpi(10f), 0, 0) }
+        instrCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.cardBg(this@MainActivity)
+            setPadding(dpi(16f), dpi(14f), dpi(16f), dpi(14f))
+            addView(instrTurn); addView(instrStreet); addView(instrTrip)
+        }
+        root.addView(instrCard, gap())
+
+        // actions ------------------------------------------------------------
+        root.addView(Ui.label(this, "ACTIONS").apply { setPadding(dpi(4f), 0, 0, dpi(6f)) })
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.cardBg(this@MainActivity)
+            setPadding(dpi(16f), dpi(4f), dpi(16f), dpi(4f))
+            addView(action("open maps relay on watch") {
+                WatchRelay.openOnWatch(force = true); render()
+            })
+            addView(action("send test message") {
+                val ok = WatchRelay.send(mapOf(
+                    "m" to Maneuver.RIGHT, "d" to "200 m", "dm" to 200,
+                    "s" to "Test from phone", "e" to "--:--", "r" to ""))
+                if (!ok) toast("not sent — ${WatchRelay.notReady.ifEmpty { "see status" }}")
+                render()
+            })
+            addView(action("reconnect watch and osmand") {
+                WatchRelay.start(applicationContext); OsmAndLink.bind(force = true); render()
+            })
+        }, gap())
+
+        // detail --------------------------------------------------------------
+        root.addView(Ui.label(this, "DETAIL").apply { setPadding(dpi(4f), 0, 0, dpi(6f)) })
+        detail = Ui.mono(this, "", 10.5f, DIM)
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.cardBg(this@MainActivity, LINE, SURFACE2)
+            setPadding(dpi(14f), dpi(12f), dpi(14f), dpi(12f))
+            addView(detail)
+        }, gap())
 
         setContentView(ScrollView(this).apply {
-            setBackgroundColor(bg)
-            addView(root)
+            setBackgroundColor(col(BG)); addView(root)
         })
 
         requestNotificationPermissionIfNeeded()
@@ -204,117 +210,118 @@ class MainActivity : Activity() {
     override fun onResume() { super.onResume(); ui.post(refresh) }
     override fun onPause() { super.onPause(); ui.removeCallbacks(refresh) }
 
-    // ------------------------------------------------------------- the verdict
+    // --------------------------------------------------------------- verdict
 
-    /** One problem, named, with the thing that fixes it. */
     private class Verdict(
-        val colour: Int,
-        val title: String,
-        val detail: String,
-        val fix: String? = null,
-        val action: (() -> Unit)? = null,
+        val colour: String, val word: String, val sub: String,
+        val fix: String? = null, val action: (() -> Unit)? = null,
     )
 
     /**
-     * Order matters: the first thing that is wrong is the thing to report.
-     * Anything further down the chain cannot work until it is fixed, so
-     * listing them all at once would just be noise.
+     * Reported in dependency order, stopping at the first failure: everything
+     * downstream of a broken link is unfixable until that one is fixed, so
+     * listing them together would only bury the one that matters.
      */
     private fun verdict(): Verdict {
         if (OsmAndLink.status.startsWith("NOT ENABLED")) {
-            return Verdict(bad, "OsmAnd is blocking us",
-                "OsmAnd gates its API per app, and registers new ones disabled. " +
-                "Enable Maps Relay in OsmAnd: Menu → Plugins.",
-                "Open OsmAnd") { openOsmAnd() }
+            return Verdict(S_BAD, "BLOCKED",
+                "osmand gates its api per app and registers new ones disabled.\n" +
+                "enable maps relay in osmand: menu › plugins",
+                "open osmand") { openOsmAnd() }
         }
         if (OsmAndLink.status.contains("not installed")) {
-            return Verdict(bad, "OsmAnd not installed",
-                "This relays OsmAnd's guidance; nothing works without it.")
+            return Verdict(S_BAD, "NO OSMAND",
+                "this relays osmand's guidance. nothing works without it")
         }
         if (!OsmAndLink.bound) {
-            return Verdict(bad, "Not connected to OsmAnd", OsmAndLink.status,
-                "Reconnect") { OsmAndLink.bind(force = true); render() }
+            return Verdict(S_BAD, "NO OSMAND", OsmAndLink.status,
+                "reconnect") { OsmAndLink.bind(force = true); render() }
         }
-        if (WatchRelay.status.startsWith("init failed") ||
-            WatchRelay.status.contains("no watch paired")) {
-            return Verdict(bad, "No watch", WatchRelay.status)
+        if (!WatchRelay.deviceConnected) {
+            return Verdict(S_BAD, "NO WATCH",
+                if (WatchRelay.deviceName.isEmpty())
+                    "no watch paired in garmin connect"
+                else "${WatchRelay.deviceName} is paired but out of range.\n" +
+                     "check bluetooth and that garmin connect is running",
+                "reconnect") { WatchRelay.start(applicationContext); render() }
         }
-        if (Status.lastError.contains("FAILURE_DURING_TRANSFER")) {
-            return Verdict(amber, "Watch app not open",
-                "Garmin drops messages aimed at an app that is not running. " +
-                "Open Maps Relay on the watch.",
-                "Open on watch") { WatchRelay.openOnWatch(force = true); render() }
+        if (Status.navActive && !WatchRelay.appRunning) {
+            return Verdict(S_WARN, "APP CLOSED",
+                "the watch is connected but maps relay is not open on it.\n" +
+                "garmin drops messages aimed at an app that is not running",
+                "open on watch") { WatchRelay.openOnWatch(force = true); render() }
         }
         if (!Status.listenerBound) {
-            // Two different faults wear the same face here, and they need
-            // different fixes: never granted, versus granted and then left
-            // unbound by Android after the app was replaced.
             return if (!notificationAccessGranted()) {
-                Verdict(amber, "Working, but killable",
-                    "Without notification access the relay cannot hold the " +
-                    "foreground, so Android may stop it mid-route, and it " +
-                    "will not wake by itself when you start navigating. " +
-                    "Turns still reach the watch while this screen is open.",
-                    "Grant access") {
+                Verdict(S_WARN, "KILLABLE",
+                    "without notification access the relay cannot hold the\n" +
+                    "foreground, so android may stop it mid-route",
+                    "grant access") {
                     startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                 }
             } else {
-                Verdict(amber, "Notification service not started",
-                    "Android leaves the listener enabled but not running " +
-                    "after the app is updated. Turn notification access OFF " +
-                    "and ON again for Maps Relay to restart it. " +
-                    "Turns still reach the watch meanwhile.",
-                    "Open settings") {
-                    // requestRebind is the documented cure and is called on
-                    // every launch, but on this phone it simply does not take.
-                    // Toggling the grant does, so send them where they can.
+                Verdict(S_WARN, "KILLABLE",
+                    "android left the listener enabled but not running.\n" +
+                    "turn notification access off and on again",
+                    "open settings") {
                     requestListenerRebind()
                     startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                 }
             }
         }
         if (!Status.navActive) {
-            return Verdict(idle, "Ready", "Start navigating in OsmAnd.")
+            return Verdict(S_OFF, "READY", "start navigating in osmand")
         }
-        return Verdict(good, "Relaying",
-            "${Status.sentCount} messages sent to the watch.")
+        return Verdict(S_OK, "RELAYING", "${Status.sentCount} messages sent to the watch")
     }
 
     private fun render() {
         val v = verdict()
-        (bannerCard.background as GradientDrawable).setColor(v.colour)
-        bannerTitle.text = v.title
-        bannerDetail.text = v.detail
+        heroWord.text = v.word
+        heroWord.setTextColor(col(v.colour))
+        heroSub.text = v.sub
+        (heroCard.background as GradientDrawable)
+            .setStroke(dpi(1f), col(v.colour))
         if (v.fix != null && v.action != null) {
-            fixButton.visibility = View.VISIBLE
-            fixButton.text = v.fix
-            fixButton.setOnClickListener { v.action.invoke() }
-        } else {
-            fixButton.visibility = View.GONE
+            heroFix.visibility = View.VISIBLE
+            heroFix.text = v.fix
+            heroFix.setOnClickListener { v.action.invoke() }
+        } else heroFix.visibility = View.GONE
+
+        // The watch pill answers three different questions, not one.
+        when {
+            !WatchRelay.deviceConnected ->
+                Ui.setPill(watchPill, this, "WATCH OFFLINE", S_BAD)
+            !WatchRelay.appRunning ->
+                Ui.setPill(watchPill, this, "APP CLOSED", S_WARN)
+            else -> Ui.setPill(watchPill, this, "WATCH LIVE", S_OK)
         }
 
-        connOsmand.set(
-            if (OsmAndLink.bound && !OsmAndLink.status.startsWith("NOT ENABLED")) good else bad,
+        rowOsmand.set(
+            if (OsmAndLink.bound && !OsmAndLink.status.startsWith("NOT ENABLED")) S_OK else S_BAD,
             OsmAndLink.status)
-        connWatch.set(
-            if (!WatchRelay.status.startsWith("init failed") &&
-                !WatchRelay.status.contains("no watch")) good else bad,
-            WatchRelay.status)
-        connNotif.set(
+        rowWatch.set(
+            if (WatchRelay.deviceConnected) S_OK else S_BAD,
+            if (WatchRelay.deviceConnected) "${WatchRelay.deviceName} connected"
+            else WatchRelay.status)
+        rowApp.set(
+            if (WatchRelay.appRunning) S_OK else S_WARN,
+            if (WatchRelay.appRunning) "open, receiving" else "not confirmed open")
+        rowNotif.set(
             when {
-                Status.listenerBound -> good
-                notificationAccessGranted() -> amber
-                else -> bad
+                Status.listenerBound -> S_OK
+                notificationAccessGranted() -> S_WARN
+                else -> S_BAD
             },
             when {
                 Status.listenerBound -> "bound"
-                notificationAccessGranted() -> "granted, waiting for Android"
+                notificationAccessGranted() -> "granted, not started"
                 else -> "not granted"
             })
 
         val showing = if (Status.navActive) View.VISIBLE else View.GONE
-        instructionCard.visibility = showing
-        instructionLabel.visibility = showing
+        instrCard.visibility = showing
+        instrLabel.visibility = showing
         instrTurn.text = "${Maneuver.name(Status.maneuver)}  ${Status.distance}".trim()
         instrStreet.text = Status.street.ifEmpty { "—" }
         instrTrip.text = listOf(Status.remaining, Status.eta)
@@ -336,64 +343,36 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------------------- furniture
 
-    private fun cardView() = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(16), dp(14), dp(16), dp(14))
-        background = GradientDrawable().apply {
-            cornerRadius = dp(14).toFloat()
-            setColor(card)
+    private fun gap() = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        .apply { bottomMargin = dpi(14f) }
+
+    private fun action(label: String, onClick: () -> Unit) =
+        Ui.mono(this, label, 13.5f, ACCENT).apply {
+            setPadding(0, dpi(13f), 0, dpi(13f))
+            isClickable = true
+            setOnClickListener { onClick() }
         }
-    }
-
-    private fun cardParams() = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-        .apply { bottomMargin = dp(14) }
-
-    private fun sectionLabel(text: String) = TextView(this).apply {
-        this.text = text
-        setTextColor(inkSoft)
-        textSize = 11f
-        typeface = Typeface.DEFAULT_BOLD
-        letterSpacing = 0.08f
-        setPadding(dp(4), 0, 0, dp(6))
-    }
-
-    private fun flatButton(label: String, onClick: () -> Unit) = TextView(this).apply {
-        text = label
-        setTextColor(amber)
-        textSize = 15f
-        typeface = Typeface.DEFAULT_BOLD
-        setPadding(0, dp(12), 0, dp(12))
-        isClickable = true
-        setOnClickListener { onClick() }
-    }
 
     private fun toast(s: String) =
         android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_SHORT).show()
 
-    /** A row with a coloured dot: green when that link is up, red when not. */
-    private class StatusRow(a: MainActivity, label: String) {
+    /** name on the left, value on the right, with a dot that carries the state. */
+    private class Row(a: MainActivity, name: String) {
+        private val dot = Ui.mono(a, "●", 13f, S_OFF)
+        private val value = Ui.mono(a, "", 11.5f, DIM).apply { gravity = Gravity.END }
         val view: LinearLayout = LinearLayout(a).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, a.dp(7), 0, a.dp(7))
-        }
-        private val dot = TextView(a).apply { textSize = 16f; text = "●" }
-        private val name = TextView(a).apply {
-            text = label; textSize = 15f; setTextColor(a.ink)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(a.dp(10), 0, a.dp(10), 0)
-        }
-        private val value = TextView(a).apply {
-            textSize = 13f; setTextColor(a.inkSoft); gravity = Gravity.END
-        }
-        init {
-            view.addView(dot)
-            view.addView(name)
-            view.addView(value, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            setPadding(0, a.dpi(8f), 0, a.dpi(8f))
+            addView(dot)
+            addView(Ui.mono(a, name, 12.5f, TEXT).apply {
+                setPadding(a.dpi(10f), 0, a.dpi(10f), 0)
+            })
+            addView(value, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         }
 
-        fun set(colour: Int, text: String) {
-            dot.setTextColor(colour)
+        fun set(colour: String, text: String) {
+            dot.setTextColor(col(colour))
             value.text = text
         }
     }
@@ -403,13 +382,9 @@ class MainActivity : Activity() {
             val i = packageManager.getLaunchIntentForPackage(p)
             if (i != null) { startActivity(i); return }
         }
-        toast("OsmAnd not found")
+        toast("osmand not found")
     }
 
-    /**
-     * Android 13+ needs this before the relay can show its ongoing
-     * notification, and without that the service cannot go foreground.
-     */
     private fun requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         val perm = android.Manifest.permission.POST_NOTIFICATIONS
@@ -419,9 +394,9 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Replacing the app leaves the listener enabled but unbound — it keeps the
-     * grant and never starts. requestRebind is the documented cure and costs
-     * nothing when it is already bound.
+     * Replacing the app leaves the listener enabled but unbound. requestRebind
+     * is the documented cure; on this phone it does not take, which is why the
+     * verdict above also tells you to toggle the grant.
      */
     private fun requestListenerRebind() {
         try {

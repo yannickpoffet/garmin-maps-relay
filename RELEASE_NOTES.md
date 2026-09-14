@@ -1,3 +1,27 @@
+## v0.17 — KnogScout's console, and an honest watch indicator
+
+Restyled after the KnogScout console so the two tools read as one: dark
+ground, hairline-stroked cards, monospace for anything that is data, one
+accent. The accent is amber rather than teal, since this app lives beside
+OsmAnd and that is the colour OsmAnd puts on its own notification.
+
+**The watch now has a pill in the header, visible from any scroll
+position**, and it distinguishes three states the old free-text status ran
+together:
+
+| | |
+|---|---|
+| `WATCH OFFLINE` | not paired, or out of range |
+| `APP CLOSED` | watch is right there, Maps Relay is not open on it |
+| `WATCH LIVE` | connected and taking messages |
+
+That distinction is the whole point. "Watch connected" was being reported
+while every message was dropped, because a connected watch and a running
+watch app are different things and only the second one delivers anything.
+`deviceConnected`, `deviceName` and `appRunning` are now tracked as typed
+state rather than parsed back out of a status string, and connections are
+four rows instead of three.
+
 ## v0.16 — tell the truth about the unbound listener
 
 v0.15 offered a "Retry" that called `requestRebind`. That is the
