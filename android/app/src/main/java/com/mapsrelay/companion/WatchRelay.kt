@@ -51,41 +51,19 @@ object WatchRelay {
     private var nextSeq = 1
 
     /**
-     * How long to wait for an ack before sending regardless.
+     * Safety net for a send whose completion callback never arrives.
      *
-     * A fallback, not the pacing mechanism. A watch app that never acks is a
-     * watch app that is not running, and the display has nothing to lose from
-     * another attempt.
+     * Pacing is that callback's job, not this constant's. It was briefly the
+     * ack's, which failed instructively: measured on a live route the watch's
+     * acks come back about eight seconds apart and three sequence numbers
+     * behind, so they never matched the payload in flight, every send fell
+     * through to the timeout instead, and the phone overran the watch badly
+     * enough that transfers started failing outright.
      */
-    private const val ACK_TIMEOUT_MS = 2500L
+    private const val SEND_TIMEOUT_MS = 5000L
 
-    /**
-     * Ack timeout, derived from what the link has actually been measured at
-     * rather than fixed in advance.
-     *
-     * A flat 2.5 s punishes a fast link: at a 700 ms round trip a single lost
-     * ack costs three and a half round trips of silence. Three times the last
-     * measured trip is generous enough not to fire on ordinary jitter, and the
-     * floor and ceiling keep one freak sample from wedging or spamming it.
-     */
-    private fun ackTimeout(): Long {
-        val rtt = lastRoundTripMs
-        if (rtt <= 0) return ACK_TIMEOUT_MS
-        return (rtt * 3).coerceIn(800L, ACK_TIMEOUT_MS)
-    }
-
-    /**
-     * Spacing to fall back on while the watch has never acknowledged anything.
-     *
-     * Without this the handshake punishes its own failure: no acks means every
-     * payload waits out the full timeout, so the display crawls at one update
-     * per 2.5 s — far worse than the fixed interval the handshake replaced. A
-     * watch that is not acking is not doing flow control, so there is nothing
-     * to wait for; pace it and move on.
-     */
-    private const val NO_ACK_INTERVAL_MS = 500L
-
-    /** True once the watch has ever acknowledged a payload. */
+    /** True once the watch has ever acknowledged a payload — evidence the app
+     *  is alive and processing, not a pacing signal. */
     @Volatile private var everAcked = false
 
     /** Round trip of the last acknowledged payload, in milliseconds — real
@@ -440,14 +418,12 @@ object WatchRelay {
         val d = device ?: run { notReady = "no watch picked"; return false }
         val a = app ?: run { notReady = "no watch app id"; return false }
 
-        // One payload in flight, and the *watch* decides when the next may go:
-        // nothing leaves until the last one is acknowledged, or long enough has
-        // passed that no ack is coming.
+        // One transfer at a time. The link is free again when Garmin reports
+        // the previous one finished, which is what paces this.
         val started = System.currentTimeMillis()
         val busy = inFlightSince
-        val wait = if (everAcked) ackTimeout() else NO_ACK_INTERVAL_MS
-        if (busy != 0L && started - busy < wait) {
-            notReady = if (everAcked) "waiting for watch ack" else "pacing (no acks yet)"
+        if (busy != 0L && started - busy < SEND_TIMEOUT_MS) {
+            notReady = "transfer in flight"
             return false
         }
         notReady = ""

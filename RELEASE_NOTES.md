@@ -1,3 +1,35 @@
+## v0.30 — the ack is too slow to steer with
+
+A live route settled it:
+
+```
+ack 42 (awaiting 45)   16:39:10.814
+ack 44 (awaiting 47)   16:39:18.915
+ack 46 (awaiting 49)   16:39:26.389
+ack 48 (awaiting 51)   16:39:34.352
+```
+
+The watch's acks come back **about eight seconds apart and three
+sequence numbers behind**. They therefore never matched the payload in
+flight, the slot was never freed by an ack, and every send fell through
+to the timeout instead — so the phone transmitted faster than the watch
+could consume. That is why `FAILURE_DURING_TRANSFER` appeared on every
+other send and why the watch screen sat on old data across several
+"relayed" messages.
+
+**Pacing moves to the send completion callback.** Garmin reports there
+when it has actually carried a message, on the timescale sends happen
+at, so the next payload goes when the previous one has genuinely
+finished. One transfer at a time, no overrun.
+
+The ack keeps the job it is good at: proof the watch app is alive and
+processing, plus `sent / acked` and a measured round trip. It is simply
+not a flow-control signal on this transport, and using it as one made
+the watch worse than the fixed interval it replaced.
+
+Sends are logged as they are issued now, so intervals are visible in the
+log rather than inferred from completion callbacks.
+
 ## v0.29 — "relayed" was counting attempts, not arrivals
 
 The phone display is instant now; the watch sometimes sits still across
