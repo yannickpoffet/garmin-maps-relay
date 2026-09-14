@@ -165,6 +165,12 @@ object Relay {
         val full = refreshed(queued)
         // Only what the watch does not already know.
         val p = synchronized(lock) { deltaOf(full) }
+        if (p == null) {
+            // Identical to what it already has. Drop it, or flush() retries
+            // this same nothing for as long as the route lasts.
+            synchronized(lock) { if (pending === queued) pending = null }
+            return
+        }
 
         if (!WatchRelay.send(p)) return
         synchronized(lock) { lastFull = full }
@@ -268,21 +274,26 @@ object Relay {
      * lost in transit cannot leave the watch permanently wrong about a field
      * that has since stopped changing.
      */
-    private fun deltaOf(full: Map<String, Any>): Map<String, Any> {
+    private fun deltaOf(full: Map<String, Any>): Map<String, Any>? {
         if (sinceFull >= FULL_EVERY || lastFull.isEmpty()) {
             sinceFull = 0
             return full
         }
-        sinceFull++
-        val out = HashMap<String, Any>()
+        val changed = HashMap<String, Any>()
         for ((k, v) in full) {
-            if (lastFull[k] != v) out[k] = v
+            if (lastFull[k] != v) changed[k] = v
         }
+        // Nothing has moved. The distance refresh at send time normalises
+        // consecutive callbacks to the same metre often enough that this fired
+        // on roughly one send in six, each one a whole transfer spent saying
+        // what the watch already had.
+        if (changed.isEmpty()) return null
+        sinceFull++
         // The maneuver and the distance to it are what the screen is for;
         // always state them, so a delta is never ambiguous about the turn.
-        out["m"] = full["m"] as Any
-        out["dm"] = full["dm"] as Any
-        return out
+        changed["m"] = full["m"] as Any
+        changed["dm"] = full["dm"] as Any
+        return changed
     }
 
     private const val FULL_EVERY = 8

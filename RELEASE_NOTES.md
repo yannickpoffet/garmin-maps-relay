@@ -1,3 +1,25 @@
+## v0.32 — measured, and one more transfer saved
+
+v0.31 measured on a live route against v0.30:
+
+| | v0.30 | v0.31 |
+|---|---|---|
+| send interval | 3.66 s | **1.37 s** |
+| ack latency | 1.15 s | **0.36 s** |
+| typical payload | 117 B | **28 B** |
+
+Ack latency fell almost exactly in proportion to payload size, which
+confirms what the size reduction was betting on: on this link a transfer
+costs what it weighs.
+
+The log also showed identical payloads still going out — `n=37` and
+`n=38` both `dm=183`, `n=43` and `n=44` both `dm=699` — because the
+delta always forced `m` and `dm` even when neither had moved. The
+send-time distance refresh normalises consecutive callbacks to the same
+metre often enough that this was roughly one send in six, each a whole
+transfer spent telling the watch what it already had. A delta with
+nothing in it is now dropped rather than sent.
+
 ## v0.31 — send what changed, not everything, every time
 
 v0.30 stopped the phone overrunning the watch and the link is healthy:

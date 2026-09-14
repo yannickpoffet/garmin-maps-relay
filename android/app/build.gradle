@@ -14,8 +14,8 @@ android {
         // java.time, which v0.8 removed.)
         minSdk 26
         targetSdk 34
-        versionCode 31
-        versionName "0.31"
+        versionCode 32
+        versionName "0.32"
     }
 
     // A stable signing key, so successive CI builds can update in place.
