@@ -1,3 +1,27 @@
+## v0.14 — say what is wrong, and open the watch when a route starts
+
+The status screen printed every counter it had as a monospace block and
+left you to work out which line mattered. That is backwards: there is
+nearly always exactly one thing wrong, and naming it is the screen's job.
+
+- **A single verdict at the top**, computed from the parts, with the
+  button that fixes it directly underneath — "OsmAnd is blocking us"
+  with a button into OsmAnd, "Watch app not open" with a button that
+  opens it. Failures are reported in dependency order, since anything
+  downstream of a broken link cannot work until it is fixed.
+- **The current instruction** is shown as an instruction rather than as
+  a serialised map, with the trip total and ETA beside it.
+- Connections are three rows with coloured dots. The raw counters are
+  still there, at the bottom, for when the verdict is not enough.
+- Styled after OsmAnd, since that is the app this one lives beside —
+  its amber, taken from the colour its own notification carries.
+
+**The watch app now opens when a route starts.** Garmin only delivers to
+a Connect IQ app that is running, and this is the one moment where doing
+it unprompted is clearly right. v0.12 did it on every failed send
+instead, which on this watch means a prompt on the wrist, repeatedly,
+mid-drive.
+
 ## v0.13 — stop prompting the wrist, and say why a send was refused
 
 v0.12 opened the watch app on every failed send. On this watch that does

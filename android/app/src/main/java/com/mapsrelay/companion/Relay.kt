@@ -130,6 +130,11 @@ object Relay {
         )
         val ok = WatchRelay.send(payload)
         Status.lastPayload = payload.toString()
+        Status.street = street
+        Status.distance = text
+        Status.eta = clockOf(trip?.arrivalTime ?: 0L)
+        Status.remaining = distanceText(trip?.leftDistance ?: -1)
+        Status.maneuver = m
         if (ok) Status.sentCount++
         if (!ok) Log.w(WatchRelay.TAG, "relay not ready, dropped: $payload")
         return ok
@@ -189,4 +194,12 @@ object Status {
     @Volatile var sentCount = 0
     @Volatile var lastPayload = "-"
     @Volatile var lastError = "-"
+
+    /** The current instruction, broken out so the UI can show it as an
+     *  instruction rather than as a serialised map. */
+    @Volatile var street = ""
+    @Volatile var distance = ""
+    @Volatile var eta = ""
+    @Volatile var remaining = ""
+    @Volatile var maneuver = Maneuver.UNKNOWN
 }

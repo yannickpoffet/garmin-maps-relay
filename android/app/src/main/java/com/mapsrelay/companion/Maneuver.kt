@@ -72,6 +72,25 @@ object Maneuver {
         else -> UNKNOWN
     }
 
+    /** Human-readable name, for the phone's status screen. */
+    fun name(code: Int): String = when (code) {
+        STRAIGHT -> "Continue straight"
+        LEFT -> "Turn left"
+        RIGHT -> "Turn right"
+        SLIGHT_LEFT -> "Slight left"
+        SLIGHT_RIGHT -> "Slight right"
+        SHARP_LEFT -> "Sharp left"
+        SHARP_RIGHT -> "Sharp right"
+        UTURN -> "U-turn"
+        ROUNDABOUT -> "Roundabout"
+        MERGE -> "Merge"
+        FORK_LEFT -> "Keep left"
+        FORK_RIGHT -> "Keep right"
+        ARRIVE -> "Arriving"
+        OFF_ROUTE -> "Off route"
+        else -> "—"
+    }
+
     /**
      * The same mapping again, from the XML spelling `TurnType.toXmlString()`
      * uses inside the turn-info bundle rather than the integer constant.

@@ -27,6 +27,10 @@ class NavListener : NotificationListenerService() {
 
     private var foreground = false
 
+    /** So the watch app is opened once when a route begins, not on every
+     *  notification update. */
+    private var routeRunning = false
+
     override fun onCreate() {
         super.onCreate()
         createChannel()
@@ -68,6 +72,16 @@ class NavListener : NotificationListenerService() {
         OsmAndLink.bind()
         Status.navActive = true
         startRelayForeground()
+
+        // A route just started. Open the watch app now, once: it has to be
+        // running for Garmin to deliver anything to it, and this is the one
+        // moment when doing it unprompted is obviously right. v0.12 called
+        // this on every failed send instead, which on this watch means a
+        // prompt on the wrist, over and over, mid-drive.
+        if (!routeRunning) {
+            routeRunning = true
+            WatchRelay.openOnWatch(force = true)
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
@@ -75,6 +89,7 @@ class NavListener : NotificationListenerService() {
         // Navigation ended. The watch falls back to its stale display on its own.
         stopRelayForeground()
         Relay.reset()
+        routeRunning = false
         Status.navActive = false
     }
 
