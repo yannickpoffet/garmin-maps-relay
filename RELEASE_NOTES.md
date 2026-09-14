@@ -1,3 +1,31 @@
+## v0.24 — the watch was being shown distances it had already passed
+
+Acks work now, and the live log showed the next problem plainly:
+
+```
+dropped dm=1188   <- newer
+SUCCESS dm=1207   <- older, actually sent
+dropped dm=1144   <- newer
+SUCCESS dm=1170   <- older again
+```
+
+v0.23 made `onDirection` `@Synchronized`, so the Binder threads OsmAnd
+delivers on piled up on the lock and each went on to transmit the
+snapshot it had taken *before* it started waiting. Serialising the
+threads made staleness worse, not better.
+
+**Queue the data, not the threads.** There is now one slot holding the
+newest payload. A payload superseded before it goes out is replaced
+rather than sent late, so what reaches the watch is always the freshest
+thing known. The slot is flushed when a payload is queued, when the
+watch acknowledges one — so the next goes the instant the link frees
+rather than on the next turn from OsmAnd — and from the status screen's
+tick as a backstop against a lost ack.
+
+Measured round trip on this link is 0.7–1.6 s. That is Garmin's BLE
+relay and it is the ceiling; the fix is to spend it on current data
+rather than on stale data.
+
 ## v0.23 — the handshake was punishing its own failure
 
 From a live route: no ack ever arrived, so every payload waited out the

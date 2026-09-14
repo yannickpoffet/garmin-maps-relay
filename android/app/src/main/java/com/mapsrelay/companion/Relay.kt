@@ -25,7 +25,14 @@ object Relay {
     private var lastManeuver = -1
     private var lastStreet = ""
     private var lastMeters = Int.MIN_VALUE
-    private var lastSentAt = 0L
+
+    /** Guards the dedupe state and the single pending slot. */
+    private val lock = Any()
+
+    /** The newest payload not yet accepted by the link, or null. One slot on
+     *  purpose: a superseded payload has no value, and sending it would move
+     *  the watch backwards. */
+    private var pending: Map<String, Any>? = null
 
     /** Last good trip read, kept so one failed getAppInfo() call blanks
      *  nothing. */
@@ -36,6 +43,7 @@ object Relay {
         lastManeuver = -1
         lastStreet = ""
         lastMeters = Int.MIN_VALUE
+        pending = null
         lastTrip = null
     }
 
@@ -46,7 +54,25 @@ object Relay {
      * nothing to parse and nothing to guess -- this is the whole of what used
      * to be MapsNotificationParser plus IconClassifier.
      */
-    @Synchronized
+    /**
+     * A turn changed. **Runs on a Binder thread**, several of them.
+     *
+     * This does not send. It builds the payload and hands it to [pending],
+     * replacing whatever was queued, then tries to flush.
+     *
+     * Queueing the *data* rather than the threads is the point. This method
+     * used to be `@Synchronized` and send inline, so Binder threads piled up
+     * on the lock and each one went on to transmit the snapshot it had taken
+     * before it started waiting. The watch was shown distances it had already
+     * passed while fresher ones were thrown away:
+     *
+     *     dropped dm=1188   <- newer
+     *     SUCCESS dm=1207   <- older, actually sent
+     *
+     * With one slot holding the latest value, a payload superseded before it
+     * goes out is simply replaced, and what reaches the watch is always the
+     * newest thing known.
+     */
     fun onDirection(info: ADirectionInfo) {
         val meters = info.distanceTo
         var maneuver = Maneuver.fromTurnType(info.turnType)
@@ -56,7 +82,6 @@ object Relay {
         // invisible when this silently did nothing.
         Status.turnsReceived++
         Status.lastTurnType = "${info.turnType} -> $maneuver @ ${meters}m"
-
         Status.navActive = true
 
         // Everything else about the trip, typed, straight from OsmAnd. This is
@@ -79,66 +104,60 @@ object Relay {
         val dm = if (maneuver == Maneuver.OFF_ROUTE) -1 else meters
         val text = distanceText(dm)
 
-        // Send on any change at all, including a single metre.
-        //
-        // This used to key on the *rendered* string, which looked reasonable
-        // and was not: above a kilometre the display reads "2.4 km" and only
-        // moves every 100 m, so the watch sat still for a hundred metres at a
-        // time while OsmAnd counted down beside it. Rate is no longer this
-        // function's problem — the handshake in WatchRelay paces the link, one
-        // payload at a time, as fast as the watch acknowledges them.
-        if (maneuver == lastManeuver && street == lastStreet && dm == lastMeters) {
-            return
+        synchronized(lock) {
+            if (maneuver == lastManeuver && street == lastStreet && dm == lastMeters) {
+                return
+            }
+            lastManeuver = maneuver
+            lastStreet = street
+            lastMeters = dm
+            pending = payloadOf(maneuver, dm, text, street, trip)
         }
-        // Only record what was actually sent. Recording a refused update as
-        // sent would suppress every later identical payload and freeze the
-        // display for good.
-        if (!send(maneuver, dm, text, street, trip)) return
-        lastManeuver = maneuver
-        lastStreet = street
-        lastMeters = dm
+        flush()
     }
 
-    /** @return true if the payload was handed to the transport. */
-    private fun send(m: Int, dm: Int, text: String, street: String,
-                     trip: OsmAndLink.Trip?): Boolean {
-        // A ceiling, not the pacing mechanism — the display-change test above
-        // does the real work. It was 1000 ms, which quietly halved the update
-        // rate: OsmAnd emits roughly once a second, so jitter alone pushed
-        // every other update under the floor and it was dropped.
-        val now = System.currentTimeMillis()
-        if (now - lastSentAt < MIN_SEND_INTERVAL_MS) return false
-        lastSentAt = now
-
-        val payload = mapOf(
-            "m" to m,
-            "d" to text,
-            "s" to street,
-            "e" to clockOf(trip?.arrivalTime ?: 0L),
-            // Trip total, not the next turn. Deliberately absent from the
-            // change test above: it ticks down constantly and would otherwise
-            // drive a send on its own every time it moved.
-            "r" to distanceText(trip?.leftDistance ?: -1),
-            "dm" to dm,
-            // The turn after this one. Nothing else on the watch can warn that
-            // a second maneuver follows immediately.
-            "m2" to (trip?.afterManeuver ?: Maneuver.UNKNOWN),
-            "dm2" to (trip?.afterDistance ?: -1),
-            "s2" to trip?.afterStreet.orEmpty(),
-            "a1" to (trip?.nextAngle ?: 0),
-            "a2" to (trip?.afterAngle ?: 0),
-        )
-        val ok = WatchRelay.send(payload)
-        Status.lastPayload = payload.toString()
-        Status.street = street
-        Status.distance = text
-        Status.eta = clockOf(trip?.arrivalTime ?: 0L)
-        Status.remaining = distanceText(trip?.leftDistance ?: -1)
-        Status.maneuver = m
-        if (ok) Status.sentCount++
-        if (!ok) Log.w(WatchRelay.TAG, "relay not ready, dropped: $payload")
-        return ok
+    /**
+     * Send the queued payload if the link will take it.
+     *
+     * Called when a payload is queued, when the watch acknowledges one (so the
+     * next goes the instant the link frees rather than on the next turn), and
+     * from the status screen's tick as a backstop.
+     */
+    fun flush() {
+        val p = synchronized(lock) { pending } ?: return
+        if (!WatchRelay.send(p)) return
+        synchronized(lock) {
+            // Only clear it if nothing newer arrived while we were sending.
+            if (pending === p) pending = null
+        }
+        Status.lastPayload = p.toString()
+        Status.sentCount++
+        Status.street = p["s"] as? String ?: ""
+        Status.distance = p["d"] as? String ?: ""
+        Status.eta = p["e"] as? String ?: ""
+        Status.remaining = p["r"] as? String ?: ""
+        Status.maneuver = p["m"] as? Int ?: Maneuver.UNKNOWN
     }
+
+    private fun payloadOf(m: Int, dm: Int, text: String, street: String,
+                          trip: OsmAndLink.Trip?): Map<String, Any> = mapOf(
+        "m" to m,
+        "d" to text,
+        "s" to street,
+        "e" to clockOf(trip?.arrivalTime ?: 0L),
+        // Trip total, not the next turn. Deliberately absent from the change
+        // test above: it ticks down constantly and would otherwise drive a
+        // send on its own every time it moved.
+        "r" to distanceText(trip?.leftDistance ?: -1),
+        // The turn after this one. Nothing else on the watch can warn that a
+        // second maneuver follows immediately.
+        "m2" to (trip?.afterManeuver ?: Maneuver.UNKNOWN),
+        "dm2" to (trip?.afterDistance ?: -1),
+        "s2" to trip?.afterStreet.orEmpty(),
+        "a1" to (trip?.nextAngle ?: 0),
+        "a2" to (trip?.afterAngle ?: 0),
+        "dm" to dm,
+    )
 
     /** Epoch seconds to a local "14:05", or "" when there is no arrival time. */
     private fun clockOf(epochSeconds: Long): String {
@@ -172,7 +191,6 @@ object Relay {
      * the next. Kept as a named constant because a future flood would want a
      * ceiling, not because this one does.
      */
-    private const val MIN_SEND_INTERVAL_MS = 0L
 
     /** Below this many metres left to the destination, the route is done. */
     private const val ARRIVAL_METERS = 30

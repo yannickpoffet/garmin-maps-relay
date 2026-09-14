@@ -303,6 +303,9 @@ object WatchRelay {
                     inFlightSince = 0L
                 }
                 onStatusChange?.invoke()
+                // The link is free: send whatever arrived while it was busy,
+                // now, rather than waiting for the next turn from OsmAnd.
+                Relay.flush()
             }
         } catch (e: Exception) {
             Log.w(TAG, "registerForAppEvents failed", e)

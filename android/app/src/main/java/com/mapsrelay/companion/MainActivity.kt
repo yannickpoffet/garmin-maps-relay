@@ -80,6 +80,8 @@ class MainActivity : Activity() {
             OsmAndLink.bind()
             // The watch can come back without the SDK telling us, so ask.
             WatchRelay.refreshDeviceStatus()
+            // Backstop: if an ack was lost, the queued payload still goes.
+            Relay.flush()
             render()
             ui.postDelayed(this, 1000)
         }
